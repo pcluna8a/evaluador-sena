@@ -13,14 +13,29 @@ st.set_page_config(
 # --- ESTILOS CSS PERSONALIZADOS (SENA) ---
 st.markdown("""
     <style>
-        /* Colores SENA */
+        @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap');
+
+        /* Estilos SENA Profesional - Copiados de index.html */
         :root {
             --sena-green: #39a900;
             --sena-dark-blue: #00324d;
             --sena-orange: #fc7323;
+            --bg-color: #f4f7f6;
+            --text-color: #333;
+        }
+
+        /* Override Streamlit Defaults */
+        .stApp {
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', sans-serif;
         }
         
-        /* Encabezado */
+        /* Ocultar elementos nativos de Streamlit que no queremos */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+
+        /* Encabezado Personalizado */
         .main-header {
             background-color: var(--sena-green);
             padding: 1.5rem;
@@ -28,44 +43,118 @@ st.markdown("""
             color: white;
             border-bottom: 5px solid var(--sena-dark-blue);
             margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             border-radius: 0 0 10px 10px;
         }
-        .main-header h1 { color: white; margin: 0; font-size: 2rem; }
-        .main-header h2 { color: white; margin: 0; font-size: 1.2rem; font-weight: normal; opacity: 0.9; }
-
-        /* Paneles */
-        .stTextArea, .stTextInput, .stFileUploader {
-            background-color: white;
-            border-radius: 10px;
-            padding: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        .main-header h1 { 
+            color: white; 
+            margin: 0; 
+            font-size: 1.8rem; 
+            font-family: 'Segoe UI', sans-serif;
+            font-weight: 700;
+        }
+        .main-header h2 { 
+            color: white; 
+            margin: 0.5rem 0 0; 
+            font-size: 1.2rem; 
+            font-weight: 400; 
+            opacity: 0.9; 
+            font-family: 'Segoe UI', sans-serif;
         }
 
-        /* Botón */
-        .stButton button {
-            background-color: var(--sena-dark-blue);
-            color: white;
-            font-weight: bold;
-            width: 100%;
-            padding: 0.8rem;
+        /* Paneles (Contenedores de Streamlit) */
+        div[data-testid="stVerticalBlock"] > div {
+            background-color: white;
+            padding: 1rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* Headers de los paneles */
+        h3 {
+            color: var(--sena-dark-blue) !important;
+            font-weight: 700 !important;
+            font-size: 1.2rem !important;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            font-family: 'Segoe UI', sans-serif !important;
+        }
+
+        /* Inputs y TextAreas */
+        .stTextInput input, .stTextArea textarea {
+            border: 1px solid #ddd;
             border-radius: 8px;
-            border: none;
-            transition: all 0.3s;
+            padding: 12px;
+            transition: border-color 0.3s;
+        }
+        .stTextInput input:focus, .stTextArea textarea:focus {
+            border-color: var(--sena-green) !important;
+            box-shadow: none !important;
+        }
+
+        /* Botón Principal */
+        .stButton button {
+            background-color: var(--sena-dark-blue) !important;
+            color: white !important;
+            border: none !important;
+            padding: 15px 25px !important;
+            font-size: 1rem !important;
+            font-weight: bold !important;
+            border-radius: 8px !important;
+            cursor: pointer !important;
+            width: 100% !important;
+            transition: background 0.3s, transform 0.1s !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
         }
         .stButton button:hover {
-            background-color: #004d73;
-            color: white;
-            transform: translateY(-2px);
+            background-color: #004d73 !important;
+            transform: translateY(-1px) !important;
+        }
+        .stButton button:active {
+            transform: translateY(1px) !important;
         }
 
         /* Resultados */
         .result-container {
             background-color: white;
-            padding: 2rem;
-            border-radius: 10px;
-            border-top: 5px solid var(--sena-orange);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            margin-top: 2rem;
+            padding: 2.5rem;
+            margin-top: 1rem;
+            border-radius: 12px;
+            border-top: 6px solid var(--sena-orange);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* Markdown en Resultados */
+        .result-container h1, .result-container h2, .result-container h3 {
+            color: var(--sena-dark-blue);
+            margin-top: 1.5rem;
+            border-bottom: none;
+        }
+        
+        /* Tablas en Resultados */
+        .result-container table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.95rem;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 0 1px #eee;
+        }
+        .result-container th {
+            background-color: #f8f9fa;
+            color: var(--sena-dark-blue);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            padding: 12px 15px;
+            text-align: left;
+        }
+        .result-container td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
         }
     </style>
 """, unsafe_allow_html=True)
