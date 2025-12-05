@@ -16,7 +16,8 @@ st.set_page_config(
 
 # --- SIDEBAR / CONFIGURACIÓN ---
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Sena_Colombia_logo.svg/1200px-Sena_Colombia_logo.svg.png", width=150)
+    # Logo Oficial SENA (Sin filtros)
+    st.image("https://www.sena.edu.co/Style%20Library/alayout/images/logoSena.png", width=150)
     st.header("Configuración")
     
     # Dark Mode Toggle
@@ -56,9 +57,14 @@ st.markdown(f"""
         @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap');
 
         :root {{
-            --sena-green: #39a900;
-            --sena-dark-blue: #00324d;
-            --sena-orange: #fc7323;
+            /* COLORES INSTITUCIONALES SENA */
+            --sena-green: #39A900;       /* Principal */
+            --sena-dark-blue: #00324D;   /* Principal */
+            --sena-light-blue: #82DEF0;  /* Principal */
+            --sena-yellow: #FFCE40;      /* Secundario */
+            --sena-dark-grey: #385C57;   /* Secundario */
+            
+            /* Variables de Tema */
             --bg-color: {bg_color};
             --text-color: {text_color};
             --card-bg: {card_bg};
@@ -172,7 +178,7 @@ st.markdown(f"""
             padding: 2.5rem;
             margin-top: 1rem;
             border-radius: 12px;
-            border-top: 6px solid var(--sena-orange);
+            border-top: 6px solid var(--sena-yellow); /* Usando Amarillo Secundario */
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
             color: var(--text-color);
         }}
@@ -209,11 +215,6 @@ st.markdown(f"""
             padding: 12px 15px;
             text-align: left;
             border-bottom: 1px solid var(--border-color);
-        }}
-        
-        /* LOGO VERDE (Filtro CSS) */
-        [data-testid="stSidebar"] img {{
-            filter: hue-rotate(95deg) brightness(0.9) saturate(1.5);
         }}
     </style>
 """, unsafe_allow_html=True)
