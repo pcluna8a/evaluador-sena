@@ -274,7 +274,7 @@ if st.button("AUDITAR CANDIDATO", type="primary"):
 
                 # 4. Llamar a Gemini
                 model = genai.GenerativeModel(
-                    model_name="gemini-1.5-pro",
+                    model_name="gemini-1.5-flash",
                     generation_config={"temperature": 0.2},
                     system_instruction=sena_instruction
                 )
