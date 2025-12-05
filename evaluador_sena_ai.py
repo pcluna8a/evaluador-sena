@@ -3,150 +3,202 @@ import google.generativeai as genai
 import PyPDF2
 import pandas as pd
 import json
+import io
+from datetime import datetime
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="SENA Evaluador AI", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="Evaluador Masivo SENA", page_icon="⚖️", layout="wide")
 
-# --- ESTILOS VISUALES SENA ---
-ESTILO_CUMPLE = """
-    <div style='background-color: #39A900; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px;'>
-        <h1 style='margin:0;'>✅ CUMPLE EL PERFIL</h1>
-        <p style='font-size: 18px;'>Candidato Idóneo según análisis AI</p>
-    </div>
-"""
-ESTILO_NO_CUMPLE = """
-    <div style='background-color: #FF671F; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px;'>
-        <h1 style='margin:0;'>⚠️ REVISIÓN REQUERIDA</h1>
-        <p style='font-size: 18px;'>La AI detectó inconsistencias con los requisitos</p>
-    </div>
-"""
+# --- GESTIÓN DE API KEY (SECRETS) ---
+# Intenta obtener la clave de los secretos de la nube, si no, la pide manual
+try:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+except:
+    api_key = st.sidebar.text_input("Ingresa tu Google API Key:", type="password")
 
-# --- BARRA LATERAL PARA LA LLAVE (Seguridad) ---
-with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Sena_Colombia_logo.svg/1200px-Sena_Colombia_logo.svg.png", width=150)
-    st.header("Configuración AI")
-    # Para compartir el link, lo ideal es usar st.secrets, pero por ahora lo pedimos aquí
-    api_key = st.text_input("Ingresa tu Google API Key:", type="password")
-    st.info("Esta llave conecta la App con los servidores de Google Gemini.")
-
-# --- FUNCIONES ---
+# --- FUNCIONES DE SOPORTE ---
 
 def extraer_texto_pdf(archivo):
-    """Lee el PDF y lo convierte en texto plano."""
-    pdf_reader = PyPDF2.PdfReader(archivo)
-    texto = ""
-    for pagina in pdf_reader.pages:
-        txt = pagina.extract_text()
-        if txt: texto += txt + "\n"
-    return texto
+    try:
+        pdf_reader = PyPDF2.PdfReader(archivo)
+        texto = ""
+        for pagina in pdf_reader.pages:
+            txt = pagina.extract_text()
+            if txt: texto += txt + "\n"
+        return texto
+    except Exception as e:
+        return f"Error leyendo PDF: {e}"
 
-def analizar_con_gemini(texto_cv, requisitos, fecha_grado):
+def consultar_gemini_avanzado(texto_cv, requisitos):
     """
-    Envía la HV y los requisitos a Gemini y pide una respuesta en formato JSON estricto.
+    Analiza el CV buscando cumplimiento de alternativas y fechas históricas.
     """
-    if not api_key:
-        return None
+    if not api_key: return None
     
-    # Configuramos el modelo
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash') # Modelo rápido y eficiente
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    # EL PROMPT (LAS INSTRUCCIONES PARA LA IA)
+    # PROMPT DE INGENIERÍA AVANZADA
     prompt = f"""
-    Actúa como un analista experto de Talento Humano del SENA.
-    Tu tarea es evaluar una hoja de vida frente a unos requisitos y extraer la experiencia laboral válida.
+    Eres un experto evaluador de Talento Humano del SENA. Tu misión es validar si un candidato cumple con el perfil.
     
-    CONTEXTO:
-    1. La experiencia laboral solo es válida si ocurrió DESPUÉS de la fecha de grado: {fecha_grado}.
-    2. Debes ignorar experiencias previas a esa fecha.
-    
-    REQUISITOS DEL CARGO:
+    PERFIL REQUERIDO (Analiza si cumple la Opción 1 O la Opción 2 si existen):
     {requisitos}
     
-    TEXTO DE LA HOJA DE VIDA:
+    INSTRUCCIONES CLAVE DE VALIDACIÓN:
+    1. **Fechas Históricas:** Reconoce fechas antiguas (ej: 1989, 1995). Son totalmente válidas.
+    2. **Punto de Corte:** Busca en el texto la fecha de GRADO o TÍTULO PROFESIONAL. La experiencia laboral solo cuenta DESPUÉS de esa fecha.
+    3. **Alternativas:** Si el perfil permite "Alternativa A" (ej: Profesional + Especialización) o "Alternativa B" (ej: Profesional + 3 años exp), verifica si cumple CUALQUIERA de las dos.
+    4. **Sumatoria:** Suma los tiempos de experiencia válida (post-grado) de todas las certificaciones encontradas.
+    
+    TEXTO DEL CANDIDATO:
     {texto_cv}
     
-    INSTRUCCIONES DE SALIDA:
-    Responde ÚNICAMENTE con un objeto JSON (sin markdown, sin explicaciones extra) con esta estructura:
+    FORMATO DE RESPUESTA (Solo JSON válido):
     {{
-        "veredicto": "CUMPLE" o "NO CUMPLE",
-        "justificacion": "Breve explicación de por qué cumple o no",
-        "experiencia_valida": [
-            {{
-                "empresa": "Nombre exacto de la empresa o institución",
-                "cargo": "Cargo desempeñado",
-                "fecha_inicio": "DD/MM/AAAA",
-                "fecha_fin": "DD/MM/AAAA",
-                "meses": (numero entero de meses calculados)
-            }}
-        ],
-        "total_meses_experiencia": (suma total de meses validos)
+        "nombre_candidato": "Nombre detectado",
+        "documento_id": "Cédula o ID detectado",
+        "fecha_grado_detectada": "DD/MM/AAAA (o 'No encontrada')",
+        "cumple_perfil": "SI" o "NO",
+        "alternativa_aplicada": "Indica si aplicó Alternativa 1, 2, o Ninguna",
+        "justificacion_breve": "Explica por qué cumple o falla",
+        "meses_experiencia_validos": (Número entero, suma total post-grado),
+        "empresas_detectadas": "Lista de empresas separadas por coma"
     }}
     """
     
     try:
         response = model.generate_content(prompt)
-        # Limpiamos la respuesta por si la IA pone ```json al principio
-        texto_limpio = response.text.replace("```json", "").replace("```", "").strip()
-        datos = json.loads(texto_limpio)
-        return datos
+        clean_text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_text)
     except Exception as e:
-        st.error(f"Error al conectar con Gemini: {e}")
-        return None
+        return {"nombre_candidato": "Error AI", "justificacion_breve": str(e)}
 
-# --- INTERFAZ PRINCIPAL ---
-
-st.title("Validador Inteligente SENA (Powered by Gemini 🧠)")
-st.markdown("Herramienta avanzada para análisis de idoneidad y extracción de datos.")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("1. Perfil y Candidato")
-    nombre = st.text_input("Nombre del Aspirante")
-    requisitos = st.text_area("Requisitos del Perfil", height=150, placeholder="Ej: Ingeniero de Sistemas con especialización, 24 meses de experiencia docente...")
-
-with col2:
-    st.subheader("2. Parámetros de Validación")
-    fecha_grado = st.date_input("Fecha de Grado (Punto de corte)", value=None)
-    archivo = st.file_uploader("Cargar HV (PDF)", type="pdf")
-
-# BOTÓN DE ANÁLISIS
-if st.button("🚀 INICIAR ANÁLISIS IA"):
-    if not api_key:
-        st.warning("⚠️ Por favor ingresa tu API Key en la barra lateral izquierda.")
-    elif not archivo or not requisitos or not fecha_grado:
-        st.warning("⚠️ Completa todos los campos.")
+def generar_excel_descargable(dataframe, archivo_plantilla=None):
+    """
+    Genera un Excel. Si el usuario subió plantilla, anexa los datos.
+    Si no, crea uno nuevo.
+    """
+    buffer = io.BytesIO()
+    
+    if archivo_plantilla is not None:
+        # Lógica para cargar plantilla y anexar (Append)
+        # Por simplicidad y robustez, cargamos la plantilla en pandas y concatenamos
+        try:
+            df_plantilla = pd.read_excel(archivo_plantilla)
+            # Normalizamos nombres de columnas para evitar duplicados si son iguales
+            df_final = pd.concat([df_plantilla, dataframe], ignore_index=True)
+        except:
+            # Si falla la lectura de la plantilla, usamos solo la data nueva
+            df_final = dataframe
     else:
-        with st.spinner("Gemini está leyendo el documento, validando fechas y empresas..."):
+        df_final = dataframe
+
+    # Guardar en buffer con motor XlsxWriter
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        df_final.to_excel(writer, index=False, sheet_name='Evaluacion_SENA')
+        
+        # Ajuste automático de ancho de columnas
+        worksheet = writer.sheets['Evaluacion_SENA']
+        for i, col in enumerate(df_final.columns):
+            width = max(df_final[col].astype(str).map(len).max(), len(col)) + 2
+            worksheet.set_column(i, i, width)
             
-            # 1. Leer PDF
-            texto_pdf = extraer_texto_pdf(archivo)
+    buffer.seek(0)
+    return buffer
+
+# --- INTERFAZ GRÁFICA ---
+
+st.title("Validador Masivo de Instructores SENA 🚀")
+st.markdown("---")
+
+# ZONA SUPERIOR: CONFIGURACIÓN Y PLANTILLA
+col_config1, col_config2 = st.columns([1, 1])
+
+with col_config1:
+    st.subheader("1. Definición del Perfil")
+    requisitos_input = st.text_area(
+        "Copie aquí los Requisitos (Incluya Alternativa 1 y 2 si aplican)", 
+        height=200,
+        placeholder="Ejemplo:\nAlternativa 1: Título Profesional en Sistemas + Especialización.\nAlternativa 2: Título Profesional + 24 meses de experiencia..."
+    )
+
+with col_config2:
+    st.subheader("2. Formato de Salida (Opcional)")
+    st.info("Si tienes un formato Excel propio, cárgalo aquí y el sistema agregará los resultados al final.")
+    plantilla_excel = st.file_uploader("Cargar Plantilla Excel (.xlsx)", type=["xlsx"])
+
+st.markdown("---")
+
+# ZONA CENTRAL: CARGA MASIVA
+st.subheader("3. Carga de Hojas de Vida (Lote)")
+uploaded_files = st.file_uploader(
+    "Seleccione TODOS los archivos PDF a evaluar (Máx 200MB)", 
+    type="pdf", 
+    accept_multiple_files=True
+)
+
+# BOTÓN DE ACCIÓN
+if st.button("🔍 EJECUTAR EVALUACIÓN MASIVA"):
+    if not api_key:
+        st.error("❌ Falta la API Key de Google.")
+    elif not requisitos_input:
+        st.warning("⚠️ Debes definir los requisitos del perfil.")
+    elif not uploaded_files:
+        st.warning("⚠️ No has cargado ningún PDF.")
+    else:
+        # BARRA DE PROGRESO
+        progreso_bar = st.progress(0)
+        status_text = st.empty()
+        
+        resultados_lista = []
+        total_archivos = len(uploaded_files)
+        
+        # BUCLE DE PROCESAMIENTO
+        for index, archivo_pdf in enumerate(uploaded_files):
+            status_text.text(f"Analizando {index + 1}/{total_archivos}: {archivo_pdf.name}...")
             
-            # 2. Consultar a la IA
-            resultado_ai = analizar_con_gemini(texto_pdf, requisitos, str(fecha_grado))
+            # 1. Extraer Texto
+            texto = extraer_texto_pdf(archivo_pdf)
             
-            if resultado_ai:
-                st.markdown("---")
-                
-                # 3. Mostrar Veredicto Visual
-                if resultado_ai["veredicto"] == "CUMPLE":
-                    st.markdown(ESTILO_CUMPLE, unsafe_allow_html=True)
-                else:
-                    st.markdown(ESTILO_NO_CUMPLE, unsafe_allow_html=True)
-                
-                st.write(f"**Justificación de la IA:** {resultado_ai['justificacion']}")
-                
-                # 4. Tabla de Experiencia Detallada
-                st.subheader("📊 Desglose de Experiencia Válida (Post-Grado)")
-                experiencias = resultado_ai["experiencia_valida"]
-                
-                if experiencias:
-                    df = pd.DataFrame(experiencias)
-                    # Reordenar columnas para mejor lectura
-                    df = df[["empresa", "cargo", "fecha_inicio", "fecha_fin", "meses"]]
-                    st.table(df)
-                    
-                    st.metric("Total Experiencia Validada", f"{resultado_ai['total_meses_experiencia']} Meses")
-                else:
-                    st.info("No se encontró experiencia válida posterior a la fecha de grado.")
+            # 2. Consultar a GEMINI
+            datos_ai = consultar_gemini_avanzado(texto, requisitos_input)
+            
+            if datos_ai:
+                # Agregamos el nombre del archivo para referencia
+                datos_ai["nombre_archivo"] = archivo_pdf.name
+                resultados_lista.append(datos_ai)
+            
+            # Actualizar barra
+            progreso_bar.progress((index + 1) / total_archivos)
+            
+        status_text.text("✅ Análisis completado. Generando informe...")
+        
+        # CREACIÓN DEL DATAFRAME (TABLA)
+        if resultados_lista:
+            df_resultados = pd.DataFrame(resultados_lista)
+            
+            # Reordenamos columnas para que se vea profesional
+            cols_orden = [
+                "nombre_candidato", "documento_id", "cumple_perfil", 
+                "meses_experiencia_validos", "fecha_grado_detectada", 
+                "alternativa_aplicada", "justificacion_breve", "nombre_archivo"
+            ]
+            # Aseguramos que existan las columnas (por si la IA falló en alguna)
+            df_resultados = df_resultados.reindex(columns=cols_orden)
+            
+            # MOSTRAR TABLA EN PANTALLA
+            st.success("Proceso finalizado con éxito.")
+            st.dataframe(df_resultados)
+            
+            # GENERAR EXCEL
+            excel_data = generar_excel_descargable(df_resultados, plantilla_excel)
+            
+            st.download_button(
+                label="📥 DESCARGAR INFORME DE EVALUACIÓN (EXCEL)",
+                data=excel_data,
+                file_name=f"Informe_Evaluacion_SENA_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.error("No se pudieron extraer datos de los archivos.")
