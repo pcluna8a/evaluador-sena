@@ -308,12 +308,17 @@ if st.button("EVALUAR CANDIDATO", type="primary"):
                 sena_instruction = """
                 Eres el Auditor de Contratación del SENA.
                 Tu tarea PRINCIPAL es determinar si el candidato CUMPLE o NO CUMPLE.
+                
+                CRITERIO DE EVALUACIÓN:
+                - Para dictaminar "CUMPLE", el candidato debe cumplir con EL 100% de los requisitos de Formación y Experiencia.
+                - Si falta UN SOLO requisito (ej: falta tiempo de experiencia, título no afín), el dictamen es "NO CUMPLE".
 
                 SALIDA ESPERADA (JSON ÚNICAMENTE):
                 {
                     "nombre": "Nombre del candidato",
                     "cedula": "ID del candidato",
-                    "idoneidad_texto": "INICIA ESTE TEXTO CON: 'CONCLUSIÓN: CUMPLE' o 'CONCLUSIÓN: NO CUMPLE'. Luego justifica detalladamente basándote en la formación y experiencia requerida vs encontrada.",
+                    "concepto_final": "CUMPLE o NO CUMPLE",
+                    "idoneidad_texto": "Justificación detallada del concepto final.",
                     "formacion_texto": "Lista detallada de títulos académicos encontrados.",
                     "experiencia_lista": [
                         {
@@ -353,6 +358,22 @@ if st.button("EVALUAR CANDIDATO", type="primary"):
                 
                 # 5. Mostrar Resultados (Markdown)
                 st.markdown("<div class='result-container'>", unsafe_allow_html=True)
+                
+                # --- DICTAMEN FINAL VISUAL ---
+                concepto = data_json.get('concepto_final', 'NO CUMPLE').upper()
+                if "CUMPLE" in concepto and "NO" not in concepto:
+                    st.markdown("""
+                        <div style='background-color: #39a900; color: white; padding: 20px; border-radius: 10px; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
+                            ✅ EL CANDIDATO CUMPLE CON EL PERFIL
+                        </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown("""
+                        <div style='background-color: #fc7323; color: white; padding: 20px; border-radius: 10px; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
+                            ⚠️ EL CANDIDATO NO CUMPLE CON EL PERFIL
+                        </div>
+                    """, unsafe_allow_html=True)
+
                 st.markdown("### 📊 Informe de Auditoría")
                 
                 if 'analisis_detallado_markdown' in data_json:
