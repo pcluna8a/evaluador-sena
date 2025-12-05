@@ -15,7 +15,6 @@ st.set_page_config(page_title="Gestor de Idoneidad SENA 2026", page_icon="🇨�
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
 except:
-    # Si no está en secretos, la pedimos manual (útil para pruebas locales)
     with st.sidebar:
         st.warning("Configuración Local detectada")
         api_key = st.text_input("Tu Google API Key:", type="password")
@@ -41,7 +40,6 @@ def consultar_cerebro_ia(texto_cv, requisitos):
     if not api_key: return None
     
     genai.configure(api_key=api_key)
-    # Usamos flash para velocidad, o pro para mayor razonamiento si tienes acceso
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""
@@ -77,59 +75,51 @@ def consultar_cerebro_ia(texto_cv, requisitos):
         clean_json = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(clean_json)
     except Exception as e:
-        return {"nombre": "Error AI", "observacion": str(e)}
+        # En caso de error, devolvemos un diccionario con claves mínimas para evitar error
+        return {
+            "nombre": "Error de Lectura", 
+            "cedula": "0", 
+            "fecha_grado": "-", 
+            "veredicto": "NO CUMPLE", 
+            "meses_exp": 0, 
+            "alternativa": "Error", 
+            "empresas": "-", 
+            "observacion": f"Error AI: {str(e)}"
+        }
 
 def llenar_plantilla_excel(dataframe, archivo_plantilla):
     """
     Toma la plantilla 2026_IDONEIDAD.xltx y vacía los datos en las celdas.
     """
-    # Cargamos la plantilla en memoria
     wb = openpyxl.load_workbook(archivo_plantilla)
-    ws = wb.active # Toma la primera hoja activa
+    ws = wb.active 
     
-    # Encontramos la primera fila vacía (Asumiendo que hay encabezados)
-    # Generalmente los formatos SENA tienen encabezados en las primeras 5-7 filas.
-    # Empezaremos a buscar espacio desde la fila 5 en adelante.
-    fila_inicial = 1
-    for row in range(1, 20):
-        if ws.cell(row=row, column=1).value is None and ws.cell(row=row+1, column=1).value is None:
-             # Si encontramos 2 filas vacías seguidas, asumimos que ahí empieza la data
-             # O simplemente, buscamos la ultima fila llena + 1
-             fila_inicial = ws.max_row + 1
-             break
+    # Buscamos fila vacía
+    start_row = ws.max_row + 1
+    # Ajuste por si el max_row es engañoso (ej: plantilla con encabezados hasta fila 7)
+    if start_row < 8: start_row = 8 
     
-    start_row = ws.max_row + 1 if ws.max_row > 1 else 2
-    
-    # Estilos básicos (Bordes delgados para que se vea bien)
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     
-    # Iteramos sobre los datos de la IA y los escribimos
-    # AJUSTE: Mapea estas columnas al ORDEN de tu Excel.
-    # Asumo este orden estándar: [Nombre, Cedula, Fecha Grado, Meses, Empresas, Alternativa, Concepto, Observacion]
-    
     for index, row in dataframe.iterrows():
-        # Escribimos celda por celda
-        ws.cell(row=start_row, column=1, value=row['nombre']).border = thin_border
-        ws.cell(row=start_row, column=2, value=row['cedula']).border = thin_border
-        ws.cell(row=start_row, column=3, value=row['fecha_grado']).border = thin_border
-        ws.cell(row=start_row, column=4, value=row['meses_exp']).border = thin_border
-        ws.cell(row=start_row, column=5, value=row['empresas']).border = thin_border
-        ws.cell(row=start_row, column=6, value=row['alternativa']).border = thin_border
+        # Usamos .get() o convertimos a string para evitar caídas si es None
+        # Convertimos todo a string (str) excepto los números para evitar errores de escritura
         
-        # Celda de Concepto (Colorizada)
-        celda_concepto = ws.cell(row=start_row, column=7, value=row['veredicto'])
+        ws.cell(row=start_row, column=1, value=str(row['nombre'])).border = thin_border
+        ws.cell(row=start_row, column=2, value=str(row['cedula'])).border = thin_border
+        ws.cell(row=start_row, column=3, value=str(row['fecha_grado'])).border = thin_border
+        ws.cell(row=start_row, column=4, value=row['meses_exp']).border = thin_border # Dejar como número
+        ws.cell(row=start_row, column=5, value=str(row['empresas'])).border = thin_border
+        ws.cell(row=start_row, column=6, value=str(row['alternativa'])).border = thin_border
+        
+        celda_concepto = ws.cell(row=start_row, column=7, value=str(row['veredicto']))
         celda_concepto.border = thin_border
         celda_concepto.alignment = Alignment(horizontal='center')
         
-        # Colores básicos (No usamos estilos complejos para asegurar compatibilidad)
-        # Verde si CUMPLE, Rojo/Naranja si NO
-        # Nota: Openpyxl requiere códigos HEX ARGB
-        
-        ws.cell(row=start_row, column=8, value=row['observacion']).border = thin_border
+        ws.cell(row=start_row, column=8, value=str(row['observacion'])).border = thin_border
         
         start_row += 1
 
-    # Guardamos en un buffer virtual para descargar
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
@@ -163,7 +153,6 @@ if st.button("🚀 EJECUTAR EVALUACIÓN Y LLENAR FORMATO"):
     if not api_key or not requisitos_txt or not archivos_pdf:
         st.error("⚠️ Faltan datos: Asegúrese de tener API Key, Requisitos y Archivos cargados.")
     else:
-        # Contenedores para resultados
         resultados = []
         barra = st.progress(0)
         status = st.empty()
@@ -172,10 +161,7 @@ if st.button("🚀 EJECUTAR EVALUACIÓN Y LLENAR FORMATO"):
         for i, pdf in enumerate(archivos_pdf):
             status.text(f"Analizando candidato {i+1}/{total}: {pdf.name}...")
             
-            # 1. Leer
             texto = extraer_texto_pdf(pdf)
-            
-            # 2. Pensar (AI)
             datos = consultar_cerebro_ia(texto, requisitos_txt)
             
             if datos:
@@ -186,21 +172,32 @@ if st.button("🚀 EJECUTAR EVALUACIÓN Y LLENAR FORMATO"):
             
         status.success("✅ Análisis finalizado. Consolidando archivo Excel...")
         
-        # CREAMOS EL DATAFRAME
+        # --- BLOQUE DE SEGURIDAD (CORRECCIÓN DEL ERROR KEYERROR) ---
         if resultados:
             df = pd.DataFrame(resultados)
             
-            # Mostramos un adelanto en pantalla
+            # 1. Definimos las columnas OBLIGATORIAS que espera el Excel
+            columnas_obligatorias = [
+                "nombre", "cedula", "fecha_grado", "meses_exp", 
+                "empresas", "alternativa", "veredicto", "observacion"
+            ]
+            
+            # 2. "Reindexamos": Si falta alguna columna, Pandas la crea y la llena con "-"
+            # Esto evita el KeyError si la IA olvidó devolver la "cedula"
+            df = df.reindex(columns=columnas_obligatorias).fillna("-")
+            
+            # 3. Aseguramos que 'meses_exp' sea numérico (poniendo 0 si hay texto raro)
+            df['meses_exp'] = pd.to_numeric(df['meses_exp'], errors='coerce').fillna(0)
+
+            # --- FIN BLOQUE DE SEGURIDAD ---
+            
             st.write("### Vista Previa de Resultados")
             st.dataframe(df)
             
-            # GENERAMOS EL EXCEL
             if archivo_plantilla:
-                # Si el usuario subió plantilla, usamos la lógica de inyección
                 excel_final = llenar_plantilla_excel(df, archivo_plantilla)
                 nombre_archivo = "2026_IDONEIDAD_DILIGENCIADO.xlsx"
             else:
-                # Si no, generamos uno genérico
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     df.to_excel(writer, index=False)
@@ -208,21 +205,12 @@ if st.button("🚀 EJECUTAR EVALUACIÓN Y LLENAR FORMATO"):
                 excel_final = output
                 nombre_archivo = "Reporte_General_Idoneidad.xlsx"
             
-            # BOTÓN DE DESCARGA
             st.download_button(
                 label="📥 DESCARGAR ARCHIVO CONSOLIDADO",
                 data=excel_final,
                 file_name=nombre_archivo,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            
-            # RESUMEN VISUAL
-            c1, c2 = st.columns(2)
-            cumplen = df[df['veredicto'] == 'CUMPLE'].shape[0]
-            no_cumplen = df[df['veredicto'] == 'NO CUMPLE'].shape[0]
-            
-            c1.metric("Candidatos QUE CUMPLEN", cumplen)
-            c2.metric("NO CUMPLEN / REVISAR", no_cumplen)
             
         else:
             st.error("No se pudo extraer información de los documentos.")
