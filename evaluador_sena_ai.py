@@ -316,7 +316,14 @@ if st.button("EVALUAR CANDIDATO", type="primary"):
                     "idoneidad_texto": "INICIA ESTE TEXTO CON: 'CONCLUSIÓN: CUMPLE' o 'CONCLUSIÓN: NO CUMPLE'. Luego justifica detalladamente basándote en la formación y experiencia requerida vs encontrada.",
                     "formacion_texto": "Lista detallada de títulos académicos encontrados.",
                     "experiencia_lista": [
-                        {"empresa": "Nombre Empresa", "fecha_inicio": "DD/MM/AAAA", "fecha_fin": "DD/MM/AAAA"}
+                        {
+                            "empresa": "Nombre Empresa", 
+                            "fecha_inicio": "DD/MM/AAAA", 
+                            "fecha_fin": "DD/MM/AAAA",
+                            "meses": "Número de meses (entero)",
+                            "dias": "Número de días (entero)",
+                            "validada": "Si o No (Basado en si cumple con la experiencia relacionada requerida)"
+                        }
                     ],
                     "analisis_detallado_markdown": "Tabla Markdown detallada de cumplimiento."
                 }
@@ -353,12 +360,38 @@ if st.button("EVALUAR CANDIDATO", type="primary"):
                 else:
                     st.markdown(data_json.get('idoneidad_texto', 'Sin análisis.'))
                 
+                # --- NUEVO: TABLA DE EXPERIENCIA PREVIA ---
+                st.markdown("### 🗓️ Detalle de Experiencia Laboral")
+                if 'experiencia_lista' in data_json and data_json['experiencia_lista']:
+                    # Crear DataFrame para mostrar
+                    df_exp = pd.DataFrame(data_json['experiencia_lista'])
+                    
+                    # Renombrar columnas para que coincidan con lo solicitado
+                    column_mapping = {
+                        'empresa': 'NOMBRE EMPRESA',
+                        'fecha_inicio': 'FECHA INICIO',
+                        'fecha_fin': 'FECHA FINAL',
+                        'meses': 'MESES',
+                        'dias': 'DÍAS',
+                        'validada': 'VALIDADA (Si/No)'
+                    }
+                    
+                    # Asegurar que existan las columnas aunque vengan vacías
+                    for col in column_mapping.keys():
+                        if col not in df_exp.columns:
+                            df_exp[col] = ""
+                            
+                    df_display = df_exp[list(column_mapping.keys())].rename(columns=column_mapping)
+                    st.table(df_display)
+                else:
+                    st.info("No se detectó experiencia laboral estructurada.")
+
                 # 6. Exportar a Excel (Plantilla)
                 excel_data, error_msg = fill_excel_template(data_json)
                 
                 if excel_data:
                     st.download_button(
-                        label="📥 Descargar Formato 2026_IDONEIDAD Diligenciado",
+                        label="📥 Generar y Descargar Archivo Excel",
                         data=excel_data,
                         file_name=f"IDONEIDAD_{nombre.replace(' ', '_')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
