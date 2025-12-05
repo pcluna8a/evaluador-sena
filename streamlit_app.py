@@ -222,42 +222,41 @@ def extraer_texto_pdf(uploaded_file):
 
 def fill_excel_template(data_json, template_path="2026_IDONEIDAD.xlsx"):
     try:
+        if not os.path.exists(template_path):
+            return None, f"El archivo plantilla '{template_path}' no se encuentra en el servidor."
+
         wb = openpyxl.load_workbook(template_path)
         ws = wb.active
         
         # 1. Datos Personales
-        # Ajustar coordenadas según inspección (G10, F11)
         if 'nombre' in data_json:
             ws['G10'] = data_json['nombre']
         if 'cedula' in data_json:
             ws['F11'] = data_json['cedula']
             
-        # 2. Idoneidad y Formación (Cajas de Texto)
+        # 2. Idoneidad y Formación
         if 'idoneidad_texto' in data_json:
             ws['D14'] = data_json['idoneidad_texto']
-            # Ajustar alineación para texto largo
             ws['D14'].alignment = Alignment(wrap_text=True, vertical='top')
             
         if 'formacion_texto' in data_json:
             ws['I15'] = data_json['formacion_texto']
             ws['I15'].alignment = Alignment(wrap_text=True, vertical='top')
             
-        # 3. Tabla de Experiencia (Desde fila 24)
+        # 3. Tabla de Experiencia
         if 'experiencia_lista' in data_json:
             start_row = 24
             for i, exp in enumerate(data_json['experiencia_lista']):
                 current_row = start_row + i
-                # D: Empresa, E: Inicio, F: Fin
                 ws[f'D{current_row}'] = exp.get('empresa', '')
                 ws[f'E{current_row}'] = exp.get('fecha_inicio', '')
                 ws[f'F{current_row}'] = exp.get('fecha_fin', '')
-                # Calcular tiempo si es posible (Opcional, por ahora dejar que Excel calcule o AI lo de)
                 
         output = io.BytesIO()
         wb.save(output)
-        return output.getvalue()
+        return output.getvalue(), None
     except Exception as e:
-        return None
+        return None, str(e)
 
 # --- INTERFAZ PRINCIPAL ---
 col1, col2 = st.columns(2)
@@ -308,23 +307,19 @@ if st.button("EVALUAR CANDIDATO", type="primary"):
                 # 3. Construir Prompt JSON
                 sena_instruction = """
                 Eres el Auditor de Contratación del SENA.
-                Tu tarea es extraer información estructurada y validar requisitos.
+                Tu tarea PRINCIPAL es determinar si el candidato CUMPLE o NO CUMPLE.
 
                 SALIDA ESPERADA (JSON ÚNICAMENTE):
-                Debes responder con un objeto JSON válido con la siguiente estructura:
                 {
                     "nombre": "Nombre del candidato",
                     "cedula": "ID del candidato",
-                    "idoneidad_texto": "Resumen narrativo de la idoneidad del candidato. Menciona si CUMPLE o NO CUMPLE los requisitos claves. Justifica brevemente.",
-                    "formacion_texto": "Lista de títulos académicos encontrados (Pregrado, Postgrado, etc.)",
+                    "idoneidad_texto": "INICIA ESTE TEXTO CON: 'CONCLUSIÓN: CUMPLE' o 'CONCLUSIÓN: NO CUMPLE'. Luego justifica detalladamente basándote en la formación y experiencia requerida vs encontrada.",
+                    "formacion_texto": "Lista detallada de títulos académicos encontrados.",
                     "experiencia_lista": [
-                        {"empresa": "Nombre Empresa 1", "fecha_inicio": "DD/MM/AAAA", "fecha_fin": "DD/MM/AAAA"},
-                        {"empresa": "Nombre Empresa 2", "fecha_inicio": "DD/MM/AAAA", "fecha_fin": "DD/MM/AAAA"}
+                        {"empresa": "Nombre Empresa", "fecha_inicio": "DD/MM/AAAA", "fecha_fin": "DD/MM/AAAA"}
                     ],
-                    "analisis_detallado_markdown": "Aquí pon la tabla de cumplimiento detallada en formato Markdown como se hacía antes."
+                    "analisis_detallado_markdown": "Tabla Markdown detallada de cumplimiento."
                 }
-                
-                No incluyas bloques de código ```json ... ```, solo el JSON puro.
                 """
 
                 prompt = f"""
@@ -359,7 +354,7 @@ if st.button("EVALUAR CANDIDATO", type="primary"):
                     st.markdown(data_json.get('idoneidad_texto', 'Sin análisis.'))
                 
                 # 6. Exportar a Excel (Plantilla)
-                excel_data = fill_excel_template(data_json)
+                excel_data, error_msg = fill_excel_template(data_json)
                 
                 if excel_data:
                     st.download_button(
@@ -369,7 +364,7 @@ if st.button("EVALUAR CANDIDATO", type="primary"):
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                 else:
-                    st.error("No se pudo generar el archivo Excel.")
+                    st.error(f"No se pudo generar el archivo Excel. Error: {error_msg}")
                 
                 st.markdown("</div>", unsafe_allow_html=True)
 
