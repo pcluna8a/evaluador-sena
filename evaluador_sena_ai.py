@@ -5,20 +5,25 @@ import pandas as pd
 import json
 import io
 from datetime import datetime
+import openpyxl
+from openpyxl.styles import Alignment, Border, Side
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Evaluador Masivo SENA", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="Gestor de Idoneidad SENA 2026", page_icon="🇨🇴", layout="wide")
 
-# --- GESTIÓN DE API KEY (SECRETS) ---
-# Intenta obtener la clave de los secretos de la nube, si no, la pide manual
+# --- GESTIÓN DE SEGURIDAD (API KEY) ---
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
 except:
-    api_key = st.sidebar.text_input("Ingresa tu Google API Key:", type="password")
+    # Si no está en secretos, la pedimos manual (útil para pruebas locales)
+    with st.sidebar:
+        st.warning("Configuración Local detectada")
+        api_key = st.text_input("Tu Google API Key:", type="password")
 
-# --- FUNCIONES DE SOPORTE ---
+# --- FUNCIONES CENTRALES ---
 
 def extraer_texto_pdf(archivo):
+    """Extrae el texto crudo del PDF para que la IA lo lea."""
     try:
         pdf_reader = PyPDF2.PdfReader(archivo)
         texto = ""
@@ -27,178 +32,197 @@ def extraer_texto_pdf(archivo):
             if txt: texto += txt + "\n"
         return texto
     except Exception as e:
-        return f"Error leyendo PDF: {e}"
+        return "Error lectura PDF"
 
-def consultar_gemini_avanzado(texto_cv, requisitos):
+def consultar_cerebro_ia(texto_cv, requisitos):
     """
-    Analiza el CV buscando cumplimiento de alternativas y fechas históricas.
+    El núcleo inteligente. Evalúa alternativas, fechas antiguas y genera veredicto.
     """
     if not api_key: return None
     
     genai.configure(api_key=api_key)
+    # Usamos flash para velocidad, o pro para mayor razonamiento si tienes acceso
     model = genai.GenerativeModel('gemini-1.5-flash')
     
-    # PROMPT DE INGENIERÍA AVANZADA
     prompt = f"""
-    Eres un experto evaluador de Talento Humano del SENA. Tu misión es validar si un candidato cumple con el perfil.
+    Actúa como Coordinador de Talento Humano del SENA. Tu tarea es diligenciar el formato de idoneidad.
     
-    PERFIL REQUERIDO (Analiza si cumple la Opción 1 O la Opción 2 si existen):
+    REGLAS DE NEGOCIO CRÍTICAS:
+    1. **Fecha de Grado:** Es el punto de partida. Solo cuenta la experiencia POSTERIOR a esta fecha.
+    2. **Fechas Históricas:** Acepta fechas antiguas (ej: 1989, 1995, 2005). El sistema anterior fallaba con esto, tú debes sumarlas correctamente.
+    3. **Alternativas:** El perfil puede tener "Alternativa 1" (ej: Título + Esp) o "Alternativa 2" (ej: Título + Exp). Si cumple CUALQUIERA, el veredicto es "CUMPLE".
+    4. **Sumatoria:** Suma los meses de experiencia válida de todas las certificaciones detectadas post-grado.
+    
+    PERFIL REQUERIDO:
     {requisitos}
     
-    INSTRUCCIONES CLAVE DE VALIDACIÓN:
-    1. **Fechas Históricas:** Reconoce fechas antiguas (ej: 1989, 1995). Son totalmente válidas.
-    2. **Punto de Corte:** Busca en el texto la fecha de GRADO o TÍTULO PROFESIONAL. La experiencia laboral solo cuenta DESPUÉS de esa fecha.
-    3. **Alternativas:** Si el perfil permite "Alternativa A" (ej: Profesional + Especialización) o "Alternativa B" (ej: Profesional + 3 años exp), verifica si cumple CUALQUIERA de las dos.
-    4. **Sumatoria:** Suma los tiempos de experiencia válida (post-grado) de todas las certificaciones encontradas.
-    
-    TEXTO DEL CANDIDATO:
+    HOJA DE VIDA DEL CANDIDATO:
     {texto_cv}
     
-    FORMATO DE RESPUESTA (Solo JSON válido):
+    SALIDA JSON OBLIGATORIA (Sin markdown):
     {{
-        "nombre_candidato": "Nombre detectado",
-        "documento_id": "Cédula o ID detectado",
-        "fecha_grado_detectada": "DD/MM/AAAA (o 'No encontrada')",
-        "cumple_perfil": "SI" o "NO",
-        "alternativa_aplicada": "Indica si aplicó Alternativa 1, 2, o Ninguna",
-        "justificacion_breve": "Explica por qué cumple o falla",
-        "meses_experiencia_validos": (Número entero, suma total post-grado),
-        "empresas_detectadas": "Lista de empresas separadas por coma"
+        "nombre": "Nombre completo normalizado",
+        "cedula": "Número de documento sin puntos",
+        "fecha_grado": "DD/MM/AAAA",
+        "veredicto": "CUMPLE" o "NO CUMPLE",
+        "meses_exp": (Número entero de meses válidos),
+        "alternativa": "Indica 'Alternativa 1', 'Alternativa 2' o 'N/A'",
+        "empresas": "Lista resumida de empresas válidas",
+        "observacion": "Breve justificación técnica del concepto (Máx 20 palabras)"
     }}
     """
     
     try:
         response = model.generate_content(prompt)
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_text)
+        clean_json = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_json)
     except Exception as e:
-        return {"nombre_candidato": "Error AI", "justificacion_breve": str(e)}
+        return {"nombre": "Error AI", "observacion": str(e)}
 
-def generar_excel_descargable(dataframe, archivo_plantilla=None):
+def llenar_plantilla_excel(dataframe, archivo_plantilla):
     """
-    Genera un Excel. Si el usuario subió plantilla, anexa los datos.
-    Si no, crea uno nuevo.
+    Toma la plantilla 2026_IDONEIDAD.xltx y vacía los datos en las celdas.
     """
-    buffer = io.BytesIO()
+    # Cargamos la plantilla en memoria
+    wb = openpyxl.load_workbook(archivo_plantilla)
+    ws = wb.active # Toma la primera hoja activa
     
-    if archivo_plantilla is not None:
-        # Lógica para cargar plantilla y anexar (Append)
-        # Por simplicidad y robustez, cargamos la plantilla en pandas y concatenamos
-        try:
-            df_plantilla = pd.read_excel(archivo_plantilla)
-            # Normalizamos nombres de columnas para evitar duplicados si son iguales
-            df_final = pd.concat([df_plantilla, dataframe], ignore_index=True)
-        except:
-            # Si falla la lectura de la plantilla, usamos solo la data nueva
-            df_final = dataframe
-    else:
-        df_final = dataframe
-
-    # Guardar en buffer con motor XlsxWriter
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        df_final.to_excel(writer, index=False, sheet_name='Evaluacion_SENA')
+    # Encontramos la primera fila vacía (Asumiendo que hay encabezados)
+    # Generalmente los formatos SENA tienen encabezados en las primeras 5-7 filas.
+    # Empezaremos a buscar espacio desde la fila 5 en adelante.
+    fila_inicial = 1
+    for row in range(1, 20):
+        if ws.cell(row=row, column=1).value is None and ws.cell(row=row+1, column=1).value is None:
+             # Si encontramos 2 filas vacías seguidas, asumimos que ahí empieza la data
+             # O simplemente, buscamos la ultima fila llena + 1
+             fila_inicial = ws.max_row + 1
+             break
+    
+    start_row = ws.max_row + 1 if ws.max_row > 1 else 2
+    
+    # Estilos básicos (Bordes delgados para que se vea bien)
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    
+    # Iteramos sobre los datos de la IA y los escribimos
+    # AJUSTE: Mapea estas columnas al ORDEN de tu Excel.
+    # Asumo este orden estándar: [Nombre, Cedula, Fecha Grado, Meses, Empresas, Alternativa, Concepto, Observacion]
+    
+    for index, row in dataframe.iterrows():
+        # Escribimos celda por celda
+        ws.cell(row=start_row, column=1, value=row['nombre']).border = thin_border
+        ws.cell(row=start_row, column=2, value=row['cedula']).border = thin_border
+        ws.cell(row=start_row, column=3, value=row['fecha_grado']).border = thin_border
+        ws.cell(row=start_row, column=4, value=row['meses_exp']).border = thin_border
+        ws.cell(row=start_row, column=5, value=row['empresas']).border = thin_border
+        ws.cell(row=start_row, column=6, value=row['alternativa']).border = thin_border
         
-        # Ajuste automático de ancho de columnas
-        worksheet = writer.sheets['Evaluacion_SENA']
-        for i, col in enumerate(df_final.columns):
-            width = max(df_final[col].astype(str).map(len).max(), len(col)) + 2
-            worksheet.set_column(i, i, width)
-            
-    buffer.seek(0)
-    return buffer
+        # Celda de Concepto (Colorizada)
+        celda_concepto = ws.cell(row=start_row, column=7, value=row['veredicto'])
+        celda_concepto.border = thin_border
+        celda_concepto.alignment = Alignment(horizontal='center')
+        
+        # Colores básicos (No usamos estilos complejos para asegurar compatibilidad)
+        # Verde si CUMPLE, Rojo/Naranja si NO
+        # Nota: Openpyxl requiere códigos HEX ARGB
+        
+        ws.cell(row=start_row, column=8, value=row['observacion']).border = thin_border
+        
+        start_row += 1
+
+    # Guardamos en un buffer virtual para descargar
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
 
 # --- INTERFAZ GRÁFICA ---
 
-st.title("Validador Masivo de Instructores SENA 🚀")
-st.markdown("---")
+st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Sena_Colombia_logo.svg/1200px-Sena_Colombia_logo.svg.png", width=120)
+st.title("Sistema Experto de Evaluación - Idoneidad 2026")
+st.markdown("Plataforma AI para validación de perfiles, cálculo de experiencia histórica y generación de informes.")
 
-# ZONA SUPERIOR: CONFIGURACIÓN Y PLANTILLA
-col_config1, col_config2 = st.columns([1, 1])
+col_izq, col_der = st.columns([1, 1])
 
-with col_config1:
-    st.subheader("1. Definición del Perfil")
-    requisitos_input = st.text_area(
-        "Copie aquí los Requisitos (Incluya Alternativa 1 y 2 si aplican)", 
-        height=200,
-        placeholder="Ejemplo:\nAlternativa 1: Título Profesional en Sistemas + Especialización.\nAlternativa 2: Título Profesional + 24 meses de experiencia..."
-    )
+with col_izq:
+    st.subheader("1. Configuración del Perfil (Norma)")
+    st.info("Pegue aquí los requisitos completos, incluyendo Alternativa 1 y 2.")
+    requisitos_txt = st.text_area("Requisitos:", height=200, placeholder="Ej: Título Profesional + 24 meses... O Alternativa 2...")
 
-with col_config2:
-    st.subheader("2. Formato de Salida (Opcional)")
-    st.info("Si tienes un formato Excel propio, cárgalo aquí y el sistema agregará los resultados al final.")
-    plantilla_excel = st.file_uploader("Cargar Plantilla Excel (.xlsx)", type=["xlsx"])
+with col_der:
+    st.subheader("2. Plantilla Institucional")
+    st.info("Cargue el archivo '2026_IDONEIDAD.xltx' o '.xlsx'")
+    archivo_plantilla = st.file_uploader("Formato Excel Base", type=["xlsx", "xltx"])
 
 st.markdown("---")
+st.subheader("3. Lote de Hojas de Vida")
+archivos_pdf = st.file_uploader("Seleccione las HVs a evaluar (PDF)", type="pdf", accept_multiple_files=True)
 
-# ZONA CENTRAL: CARGA MASIVA
-st.subheader("3. Carga de Hojas de Vida (Lote)")
-uploaded_files = st.file_uploader(
-    "Seleccione TODOS los archivos PDF a evaluar (Máx 200MB)", 
-    type="pdf", 
-    accept_multiple_files=True
-)
+# --- BOTÓN PRINCIPAL ---
 
-# BOTÓN DE ACCIÓN
-if st.button("🔍 EJECUTAR EVALUACIÓN MASIVA"):
-    if not api_key:
-        st.error("❌ Falta la API Key de Google.")
-    elif not requisitos_input:
-        st.warning("⚠️ Debes definir los requisitos del perfil.")
-    elif not uploaded_files:
-        st.warning("⚠️ No has cargado ningún PDF.")
+if st.button("🚀 EJECUTAR EVALUACIÓN Y LLENAR FORMATO"):
+    if not api_key or not requisitos_txt or not archivos_pdf:
+        st.error("⚠️ Faltan datos: Asegúrese de tener API Key, Requisitos y Archivos cargados.")
     else:
-        # BARRA DE PROGRESO
-        progreso_bar = st.progress(0)
-        status_text = st.empty()
+        # Contenedores para resultados
+        resultados = []
+        barra = st.progress(0)
+        status = st.empty()
+        total = len(archivos_pdf)
         
-        resultados_lista = []
-        total_archivos = len(uploaded_files)
+        for i, pdf in enumerate(archivos_pdf):
+            status.text(f"Analizando candidato {i+1}/{total}: {pdf.name}...")
+            
+            # 1. Leer
+            texto = extraer_texto_pdf(pdf)
+            
+            # 2. Pensar (AI)
+            datos = consultar_cerebro_ia(texto, requisitos_txt)
+            
+            if datos:
+                datos['archivo_origen'] = pdf.name
+                resultados.append(datos)
+            
+            barra.progress((i + 1) / total)
+            
+        status.success("✅ Análisis finalizado. Consolidando archivo Excel...")
         
-        # BUCLE DE PROCESAMIENTO
-        for index, archivo_pdf in enumerate(uploaded_files):
-            status_text.text(f"Analizando {index + 1}/{total_archivos}: {archivo_pdf.name}...")
+        # CREAMOS EL DATAFRAME
+        if resultados:
+            df = pd.DataFrame(resultados)
             
-            # 1. Extraer Texto
-            texto = extraer_texto_pdf(archivo_pdf)
+            # Mostramos un adelanto en pantalla
+            st.write("### Vista Previa de Resultados")
+            st.dataframe(df)
             
-            # 2. Consultar a GEMINI
-            datos_ai = consultar_gemini_avanzado(texto, requisitos_input)
+            # GENERAMOS EL EXCEL
+            if archivo_plantilla:
+                # Si el usuario subió plantilla, usamos la lógica de inyección
+                excel_final = llenar_plantilla_excel(df, archivo_plantilla)
+                nombre_archivo = "2026_IDONEIDAD_DILIGENCIADO.xlsx"
+            else:
+                # Si no, generamos uno genérico
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    df.to_excel(writer, index=False)
+                output.seek(0)
+                excel_final = output
+                nombre_archivo = "Reporte_General_Idoneidad.xlsx"
             
-            if datos_ai:
-                # Agregamos el nombre del archivo para referencia
-                datos_ai["nombre_archivo"] = archivo_pdf.name
-                resultados_lista.append(datos_ai)
-            
-            # Actualizar barra
-            progreso_bar.progress((index + 1) / total_archivos)
-            
-        status_text.text("✅ Análisis completado. Generando informe...")
-        
-        # CREACIÓN DEL DATAFRAME (TABLA)
-        if resultados_lista:
-            df_resultados = pd.DataFrame(resultados_lista)
-            
-            # Reordenamos columnas para que se vea profesional
-            cols_orden = [
-                "nombre_candidato", "documento_id", "cumple_perfil", 
-                "meses_experiencia_validos", "fecha_grado_detectada", 
-                "alternativa_aplicada", "justificacion_breve", "nombre_archivo"
-            ]
-            # Aseguramos que existan las columnas (por si la IA falló en alguna)
-            df_resultados = df_resultados.reindex(columns=cols_orden)
-            
-            # MOSTRAR TABLA EN PANTALLA
-            st.success("Proceso finalizado con éxito.")
-            st.dataframe(df_resultados)
-            
-            # GENERAR EXCEL
-            excel_data = generar_excel_descargable(df_resultados, plantilla_excel)
-            
+            # BOTÓN DE DESCARGA
             st.download_button(
-                label="📥 DESCARGAR INFORME DE EVALUACIÓN (EXCEL)",
-                data=excel_data,
-                file_name=f"Informe_Evaluacion_SENA_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                label="📥 DESCARGAR ARCHIVO CONSOLIDADO",
+                data=excel_final,
+                file_name=nombre_archivo,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+            
+            # RESUMEN VISUAL
+            c1, c2 = st.columns(2)
+            cumplen = df[df['veredicto'] == 'CUMPLE'].shape[0]
+            no_cumplen = df[df['veredicto'] == 'NO CUMPLE'].shape[0]
+            
+            c1.metric("Candidatos QUE CUMPLEN", cumplen)
+            c2.metric("NO CUMPLEN / REVISAR", no_cumplen)
+            
         else:
-            st.error("No se pudieron extraer datos de los archivos.")
+            st.error("No se pudo extraer información de los documentos.")
