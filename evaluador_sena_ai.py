@@ -337,14 +337,24 @@ if st.button("EVALUAR CANDIDATO", type="primary"):
                 {texto_evidencia}
                 """
 
-                # 4. Llamar a Gemini
-                model = genai.GenerativeModel(
-                    model_name="gemini-1.5-pro",
-                    generation_config={"temperature": 0.1, "response_mime_type": "application/json"},
-                    system_instruction=sena_instruction
-                )
-                
-                response = model.generate_content(prompt)
+                # 4. Llamar a Gemini (Con Fallback Robusto)
+                try:
+                    # Intento 1: Gemini 1.5 Pro (Mejor Calidad)
+                    model = genai.GenerativeModel(
+                        model_name="gemini-1.5-pro",
+                        generation_config={"temperature": 0.1, "response_mime_type": "application/json"},
+                        system_instruction=sena_instruction
+                    )
+                    response = model.generate_content(prompt)
+                except Exception as e_pro:
+                    # Intento 2: Gemini 1.5 Flash (Mayor Disponibilidad/Velocidad)
+                    st.warning(f"⚠️ El modelo Pro no está disponible ({str(e_pro)}). Cambiando automáticamente a Gemini 1.5 Flash...")
+                    model = genai.GenerativeModel(
+                        model_name="gemini-1.5-flash",
+                        generation_config={"temperature": 0.1, "response_mime_type": "application/json"},
+                        system_instruction=sena_instruction
+                    )
+                    response = model.generate_content(prompt)
                 
                 # Parsear JSON
                 data_json = json.loads(response.text)
