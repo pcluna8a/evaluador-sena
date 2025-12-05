@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SENA CIES - Validador de Instructores</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Estilos SENA Profesional */
+        :root {
+            --sena-green: #39a900;
+            --sena-dark-blue: #00324d;
+            --sena-orange: #fc7323;
+            --bg-color: #f4f7f6;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--sena-green);
+            color: white;
+            padding: 1.5rem;
+            text-align: center;
+            border-bottom: 5px solid var(--sena-dark-blue);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+        }
+
+        header h2 {
+            margin: 0.5rem 0 0;
+            font-size: 1.2rem;
+            font-weight: 400;
+            opacity: 0.9;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 2rem;
+            gap: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            flex: 1;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .panel {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            flex: 1;
+            min-width: 350px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel:hover {
+            transform: translateY(-2px);
+        }
+
+        .panel-header {
+            color: var(--sena-dark-blue);
+            font-weight: 700;
+            font-size: 1.2rem;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #555;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"],
+        textarea,
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            border-color: var(--sena-green);
+            outline: none;
+        }
+
+        textarea {
+            height: 150px;
+            resize: vertical;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            margin-top: 5px;
+        }
+
+        button {
+            background: var(--sena-dark-blue);
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: auto;
+            transition: background 0.3s, transform 0.1s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        button:hover {
+            background: #004d73;
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result-area {
+            width: 100%;
+            background: white;
+            padding: 2.5rem;
+            margin-top: 1rem;
+            border-radius: 12px;
+            border-top: 6px solid var(--sena-orange);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            min-height: 200px;
+        }
+
+        /* Markdown Styles */
+        .result-area h1,
+        .result-area h2,
+        .result-area h3 {
+            color: var(--sena-dark-blue);
+            margin-top: 1.5rem;
+        }
+
+        .result-area ul {
+            padding-left: 20px;
+        }
+
+        .result-area p {
+            line-height: 1.6;
+            color: #444;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.95rem;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 0 1px #eee;
+        }
+
+        th,
+        td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            color: var(--sena-dark-blue);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background-color: #fcfcfc;
+        }
+
+        #loader {
+            display: none;
+            text-align: center;
+            margin-top: 15px;
+            font-weight: 600;
+            color: var(--sena-dark-blue);
+        }
+
+        .or-divider {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 0.9rem;
+            color: #888;
+            position: relative;
+        }
+
+        .or-divider::before,
+        .or-divider::after {
+            content: "";
+            display: inline-block;
+            width: 30%;
+            height: 1px;
+            background: #eee;
+            vertical-align: middle;
+            margin: 0 10px;
+        }
+
+        .file-list {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .file-list-item {
+            background: #f0f0f0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            display: inline-block;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Validador de Idoneidad - Instructores 2025</h1>
+        <h2>SENA Regional Huila - CIES</h2>
+    </header>
+
+    <div class="container">
+        <!-- Panel 1: Requisitos -->
+        <div class="panel">
+            <div class="panel-header">
+                <span>📋</span> 1. Requisitos del Perfil
+            </div>
+
+            <div class="form-group">
+                <label for="requisitos_pdf">Opción A: Subir PDF del Perfil</label>
+                <input type="file" id="requisitos_pdf" accept="application/pdf">
+            </div>
+
+            <div class="or-divider">O</div>
+
+            <div class="form-group">
+                <label for="requisitos">Opción B: Pegar Texto de Requisitos</label>
+                <textarea id="requisitos" placeholder="Pegue aquí los requisitos si no tiene el PDF..."></textarea>
+            </div>
+        </div>
+
+        <!-- Panel 2: Candidato -->
+        <div class="panel">
+            <div class="panel-header">
+                <span>👤</span> 2. Datos del Candidato y Soportes
+            </div>
+
+            <div class="form-group">
+                <label>Nombre Completo</label>
+                <input type="text" id="nombre" placeholder="Ej: Juan Pérez">
+            </div>
+
+            <div class="form-group">
+                <label>Identificación (ID)</label>
+                <input type="text" id="identificacion" placeholder="Ej: 123456789">
+            </div>
+
+            <div class="form-group">
+                <label>Subir Soportes (PDFs)</label>
+                <input type="file" id="soportes" multiple accept="application/pdf" onchange="updateFileList()">
+                <div id="fileList" class="file-list"></div>
+            </div>
+
+            <button onclick="validar()" id="btnValidar">AUDITAR CANDIDATO</button>
+            <div id="loader">
+                <span style="font-size: 1.5rem;">⚙️</span><br>
+                Analizando documentos con IA...<br>
+                <small>Esto puede tardar unos segundos.</small>
+            </div>
+        </div>
+
+        <!-- Resultados -->
+        <div class="result-area" id="resultado">
+            <p style="text-align: center; color: #888; margin-top: 2rem;">
+                Aquí aparecerán los resultados de la auditoría...
+            </p>
+        </div>
+    </div>
+
+    <script>
+        function updateFileList() {
+            const input = document.getElementById('soportes');
+            const list = document.getElementById('fileList');
+            list.innerHTML = '';
+            if (input.files.length > 0) {
+                for (let i = 0; i < input.files.length; i++) {
+                    const span = document.createElement('span');
+                    span.className = 'file-list-item';
+                    span.textContent = input.files[i].name;
+                    list.appendChild(span);
+                }
+            }
+        }
+
+        async function validar() {
+            const output = document.getElementById('resultado');
+            const loader = document.getElementById('loader');
+            const btn = document.getElementById('btnValidar');
+
+            // Inputs
+            const nombre = document.getElementById('nombre').value;
+            const id = document.getElementById('identificacion').value;
+            const requisitosTxt = document.getElementById('requisitos').value;
+            const requisitosPdf = document.getElementById('requisitos_pdf').files[0];
+            const soportes = document.getElementById('soportes').files;
+
+            // Validaciones básicas
+            if (!nombre || !id) { alert("Por favor complete los datos del candidato."); return; }
+            if (!requisitosTxt && !requisitosPdf) { alert("Debe proporcionar los requisitos (Texto o PDF)."); return; }
+            if (soportes.length === 0) { alert("Debe subir al menos un soporte PDF."); return; }
+
+            // Detección automática de la URL del Backend
+            // Usamos ruta relativa para que funcione tanto en localhost, LAN y Nube automáticamente.
+            const API_URL = '/api/validar-contratacion';
+
+            const formData = new FormData();
+            formData.append('nombre', nombre);
+            formData.append('identificacion', id);
+            if (requisitosTxt) formData.append('requisitos', requisitosTxt);
+            if (requisitosPdf) formData.append('requisitos_pdf', requisitosPdf);
+
+            for (let i = 0; i < soportes.length; i++) formData.append('soportes', soportes[i]);
+
+            // UI Loading State
+            btn.disabled = true;
+            btn.style.opacity = "0.7";
+            loader.style.display = 'block';
+            output.innerHTML = '<p style="text-align:center; color:#666;">Generando informe de auditoría...</p>';
+
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.error) {
+                    output.innerHTML = `<div style="background:#ffebee; color:#c62828; padding:15px; border-radius:8px; border:1px solid #ffcdd2;">
+                        <strong>Error:</strong> ${data.error}
+                    </div>`;
+                } else {
+                    output.innerHTML = marked.parse(data.analisis);
+                }
+            } catch (e) {
+                output.innerHTML = `<div style="background:#ffebee; color:#c62828; padding:15px; border-radius:8px; border:1px solid #ffcdd2;">
+                    <strong>Error de Conexión:</strong> No se pudo contactar con el servidor. <br> ${e.message}
+                </div>`;
+            } finally {
+                btn.disabled = false;
+                btn.style.opacity = "1";
+                loader.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+
+</html>
