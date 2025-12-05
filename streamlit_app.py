@@ -2,7 +2,10 @@ import pandas as pd
 import io
 import re
 
-# ... (imports remain)
+import streamlit as st
+import google.generativeai as genai
+from pypdf import PdfReader
+import os
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
