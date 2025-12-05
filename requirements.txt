@@ -4,3 +4,7 @@ google-generativeai
 pypdf
 gunicorn
 streamlit
+PyPDF2
+pandas
+openpyxl
+xlsxwriter
