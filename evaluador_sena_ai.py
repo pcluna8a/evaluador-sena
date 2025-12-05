@@ -1,216 +1,291 @@
 import streamlit as st
 import google.generativeai as genai
-import PyPDF2
-import pandas as pd
-import json
-import io
-from datetime import datetime
-import openpyxl
-from openpyxl.styles import Alignment, Border, Side
+from pypdf import PdfReader
+import os
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Gestor de Idoneidad SENA 2026", page_icon="🇨🇴", layout="wide")
+# --- CONFIGURACIÓN DE LA PÁGINA ---
+st.set_page_config(
+    page_title="SENA CIES - Validador de Instructores",
+    page_icon="✅",
+    layout="wide"
+)
 
-# --- GESTIÓN DE SEGURIDAD (API KEY) ---
-try:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-except:
-    with st.sidebar:
-        st.warning("Configuración Local detectada")
-        api_key = st.text_input("Tu Google API Key:", type="password")
+# --- ESTILOS CSS PERSONALIZADOS (SENA) ---
+st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap');
 
-# --- FUNCIONES CENTRALES ---
-
-def extraer_texto_pdf(archivo):
-    """Extrae el texto crudo del PDF para que la IA lo lea."""
-    try:
-        pdf_reader = PyPDF2.PdfReader(archivo)
-        texto = ""
-        for pagina in pdf_reader.pages:
-            txt = pagina.extract_text()
-            if txt: texto += txt + "\n"
-        return texto
-    except Exception as e:
-        return "Error lectura PDF"
-
-def consultar_cerebro_ia(texto_cv, requisitos):
-    """
-    El núcleo inteligente. Evalúa alternativas, fechas antiguas y genera veredicto.
-    """
-    if not api_key: return None
-    
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    
-    prompt = f"""
-    Actúa como Coordinador de Talento Humano del SENA. Tu tarea es diligenciar el formato de idoneidad.
-    
-    REGLAS DE NEGOCIO CRÍTICAS:
-    1. **Fecha de Grado:** Es el punto de partida. Solo cuenta la experiencia POSTERIOR a esta fecha.
-    2. **Fechas Históricas:** Acepta fechas antiguas (ej: 1989, 1995, 2005). El sistema anterior fallaba con esto, tú debes sumarlas correctamente.
-    3. **Alternativas:** El perfil puede tener "Alternativa 1" (ej: Título + Esp) o "Alternativa 2" (ej: Título + Exp). Si cumple CUALQUIERA, el veredicto es "CUMPLE".
-    4. **Sumatoria:** Suma los meses de experiencia válida de todas las certificaciones detectadas post-grado.
-    
-    PERFIL REQUERIDO:
-    {requisitos}
-    
-    HOJA DE VIDA DEL CANDIDATO:
-    {texto_cv}
-    
-    SALIDA JSON OBLIGATORIA (Sin markdown):
-    {{
-        "nombre": "Nombre completo normalizado",
-        "cedula": "Número de documento sin puntos",
-        "fecha_grado": "DD/MM/AAAA",
-        "veredicto": "CUMPLE" o "NO CUMPLE",
-        "meses_exp": (Número entero de meses válidos),
-        "alternativa": "Indica 'Alternativa 1', 'Alternativa 2' o 'N/A'",
-        "empresas": "Lista resumida de empresas válidas",
-        "observacion": "Breve justificación técnica del concepto (Máx 20 palabras)"
-    }}
-    """
-    
-    try:
-        response = model.generate_content(prompt)
-        clean_json = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_json)
-    except Exception as e:
-        # En caso de error, devolvemos un diccionario con claves mínimas para evitar error
-        return {
-            "nombre": "Error de Lectura", 
-            "cedula": "0", 
-            "fecha_grado": "-", 
-            "veredicto": "NO CUMPLE", 
-            "meses_exp": 0, 
-            "alternativa": "Error", 
-            "empresas": "-", 
-            "observacion": f"Error AI: {str(e)}"
+        /* Estilos SENA Profesional - Copiados de index.html */
+        :root {
+            --sena-green: #39a900;
+            --sena-dark-blue: #00324d;
+            --sena-orange: #fc7323;
+            --bg-color: #f4f7f6;
+            --text-color: #333;
         }
 
-def llenar_plantilla_excel(dataframe, archivo_plantilla):
-    """
-    Toma la plantilla 2026_IDONEIDAD.xltx y vacía los datos en las celdas.
-    """
-    wb = openpyxl.load_workbook(archivo_plantilla)
-    ws = wb.active 
+        /* Override Streamlit Defaults */
+        .stApp {
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', sans-serif;
+        }
+        
+        /* Ocultar elementos nativos de Streamlit que no queremos */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+
+        /* Encabezado Personalizado */
+        .main-header {
+            background-color: var(--sena-green);
+            padding: 1.5rem;
+            text-align: center;
+            color: white;
+            border-bottom: 5px solid var(--sena-dark-blue);
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 0 0 10px 10px;
+        }
+        .main-header h1 { 
+            color: white; 
+            margin: 0; 
+            font-size: 1.8rem; 
+            font-family: 'Segoe UI', sans-serif;
+            font-weight: 700;
+        }
+        .main-header h2 { 
+            color: white; 
+            margin: 0.5rem 0 0; 
+            font-size: 1.2rem; 
+            font-weight: 400; 
+            opacity: 0.9; 
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        /* Paneles (Contenedores de Streamlit) */
+        div[data-testid="stVerticalBlock"] > div {
+            background-color: white;
+            padding: 1rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* Headers de los paneles */
+        h3 {
+            color: var(--sena-dark-blue) !important;
+            font-weight: 700 !important;
+            font-size: 1.2rem !important;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            font-family: 'Segoe UI', sans-serif !important;
+        }
+
+        /* Inputs y TextAreas */
+        .stTextInput input, .stTextArea textarea {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 12px;
+            transition: border-color 0.3s;
+        }
+        .stTextInput input:focus, .stTextArea textarea:focus {
+            border-color: var(--sena-green) !important;
+            box-shadow: none !important;
+        }
+
+        /* Botón Principal */
+        .stButton button {
+            background-color: var(--sena-dark-blue) !important;
+            color: white !important;
+            border: none !important;
+            padding: 15px 25px !important;
+            font-size: 1rem !important;
+            font-weight: bold !important;
+            border-radius: 8px !important;
+            cursor: pointer !important;
+            width: 100% !important;
+            transition: background 0.3s, transform 0.1s !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+        }
+        .stButton button:hover {
+            background-color: #004d73 !important;
+            transform: translateY(-1px) !important;
+        }
+        .stButton button:active {
+            transform: translateY(1px) !important;
+        }
+
+        /* Resultados */
+        .result-container {
+            background-color: white;
+            padding: 2.5rem;
+            margin-top: 1rem;
+            border-radius: 12px;
+            border-top: 6px solid var(--sena-orange);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* Markdown en Resultados */
+        .result-container h1, .result-container h2, .result-container h3 {
+            color: var(--sena-dark-blue);
+            margin-top: 1.5rem;
+            border-bottom: none;
+        }
+        
+        /* Tablas en Resultados */
+        .result-container table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.95rem;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 0 1px #eee;
+        }
+        .result-container th {
+            background-color: #f8f9fa;
+            color: var(--sena-dark-blue);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            padding: 12px 15px;
+            text-align: left;
+        }
+        .result-container td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- HEADER ---
+st.markdown("""
+    <div class="main-header">
+        <h1>Validador de Idoneidad - Instructores 2025</h1>
+        <h2>SENA Regional Huila - CIES</h2>
+    </div>
+""", unsafe_allow_html=True)
+
+# --- SIDEBAR / CONFIGURACIÓN ---
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Sena_Colombia_logo.svg/1200px-Sena_Colombia_logo.svg.png", width=150)
+    st.header("Configuración")
     
-    # Buscamos fila vacía
-    start_row = ws.max_row + 1
-    # Ajuste por si el max_row es engañoso (ej: plantilla con encabezados hasta fila 7)
-    if start_row < 8: start_row = 8 
+    # API Key Management
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        api_key = st.text_input("Ingresa tu Google API Key", type="password")
     
-    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-    
-    for index, row in dataframe.iterrows():
-        # Usamos .get() o convertimos a string para evitar caídas si es None
-        # Convertimos todo a string (str) excepto los números para evitar errores de escritura
-        
-        ws.cell(row=start_row, column=1, value=str(row['nombre'])).border = thin_border
-        ws.cell(row=start_row, column=2, value=str(row['cedula'])).border = thin_border
-        ws.cell(row=start_row, column=3, value=str(row['fecha_grado'])).border = thin_border
-        ws.cell(row=start_row, column=4, value=row['meses_exp']).border = thin_border # Dejar como número
-        ws.cell(row=start_row, column=5, value=str(row['empresas'])).border = thin_border
-        ws.cell(row=start_row, column=6, value=str(row['alternativa'])).border = thin_border
-        
-        celda_concepto = ws.cell(row=start_row, column=7, value=str(row['veredicto']))
-        celda_concepto.border = thin_border
-        celda_concepto.alignment = Alignment(horizontal='center')
-        
-        ws.cell(row=start_row, column=8, value=str(row['observacion'])).border = thin_border
-        
-        start_row += 1
-
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output
-
-# --- INTERFAZ GRÁFICA ---
-
-st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/Sena_Colombia_logo.svg/1200px-Sena_Colombia_logo.svg.png", width=120)
-st.title("Sistema Experto de Evaluación - Idoneidad 2026")
-st.markdown("Plataforma AI para validación de perfiles, cálculo de experiencia histórica y generación de informes.")
-
-col_izq, col_der = st.columns([1, 1])
-
-with col_izq:
-    st.subheader("1. Configuración del Perfil (Norma)")
-    st.info("Pegue aquí los requisitos completos, incluyendo Alternativa 1 y 2.")
-    requisitos_txt = st.text_area("Requisitos:", height=200, placeholder="Ej: Título Profesional + 24 meses... O Alternativa 2...")
-
-with col_der:
-    st.subheader("2. Plantilla Institucional")
-    st.info("Cargue el archivo '2026_IDONEIDAD.xltx' o '.xlsx'")
-    archivo_plantilla = st.file_uploader("Formato Excel Base", type=["xlsx", "xltx"])
-
-st.markdown("---")
-st.subheader("3. Lote de Hojas de Vida")
-archivos_pdf = st.file_uploader("Seleccione las HVs a evaluar (PDF)", type="pdf", accept_multiple_files=True)
-
-# --- BOTÓN PRINCIPAL ---
-
-if st.button("🚀 EJECUTAR EVALUACIÓN Y LLENAR FORMATO"):
-    if not api_key or not requisitos_txt or not archivos_pdf:
-        st.error("⚠️ Faltan datos: Asegúrese de tener API Key, Requisitos y Archivos cargados.")
+    if api_key:
+        genai.configure(api_key=api_key)
+        st.success("API Key configurada")
     else:
-        resultados = []
-        barra = st.progress(0)
-        status = st.empty()
-        total = len(archivos_pdf)
-        
-        for i, pdf in enumerate(archivos_pdf):
-            status.text(f"Analizando candidato {i+1}/{total}: {pdf.name}...")
-            
-            texto = extraer_texto_pdf(pdf)
-            datos = consultar_cerebro_ia(texto, requisitos_txt)
-            
-            if datos:
-                datos['archivo_origen'] = pdf.name
-                resultados.append(datos)
-            
-            barra.progress((i + 1) / total)
-            
-        status.success("✅ Análisis finalizado. Consolidando archivo Excel...")
-        
-        # --- BLOQUE DE SEGURIDAD (CORRECCIÓN DEL ERROR KEYERROR) ---
-        if resultados:
-            df = pd.DataFrame(resultados)
-            
-            # 1. Definimos las columnas OBLIGATORIAS que espera el Excel
-            columnas_obligatorias = [
-                "nombre", "cedula", "fecha_grado", "meses_exp", 
-                "empresas", "alternativa", "veredicto", "observacion"
-            ]
-            
-            # 2. "Reindexamos": Si falta alguna columna, Pandas la crea y la llena con "-"
-            # Esto evita el KeyError si la IA olvidó devolver la "cedula"
-            df = df.reindex(columns=columnas_obligatorias).fillna("-")
-            
-            # 3. Aseguramos que 'meses_exp' sea numérico (poniendo 0 si hay texto raro)
-            df['meses_exp'] = pd.to_numeric(df['meses_exp'], errors='coerce').fillna(0)
+        st.warning("Necesitas una API Key para continuar.")
 
-            # --- FIN BLOQUE DE SEGURIDAD ---
-            
-            st.write("### Vista Previa de Resultados")
-            st.dataframe(df)
-            
-            if archivo_plantilla:
-                excel_final = llenar_plantilla_excel(df, archivo_plantilla)
-                nombre_archivo = "2026_IDONEIDAD_DILIGENCIADO.xlsx"
-            else:
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, index=False)
-                output.seek(0)
-                excel_final = output
-                nombre_archivo = "Reporte_General_Idoneidad.xlsx"
-            
-            st.download_button(
-                label="📥 DESCARGAR ARCHIVO CONSOLIDADO",
-                data=excel_final,
-                file_name=nombre_archivo,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            
-        else:
-            st.error("No se pudo extraer información de los documentos.")
+# --- LÓGICA DE NEGOCIO ---
+def extraer_texto_pdf(uploaded_file):
+    try:
+        reader = PdfReader(uploaded_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+        return text
+    except Exception as e:
+        return f"[Error leyendo PDF: {str(e)}]"
+
+# --- INTERFAZ PRINCIPAL ---
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("📋 1. Requisitos del Perfil")
+    
+    tab_pdf, tab_text = st.tabs(["Subir PDF", "Pegar Texto"])
+    
+    with tab_pdf:
+        requisitos_pdf = st.file_uploader("Cargar PDF del Perfil", type=["pdf"], key="req_pdf")
+    
+    with tab_text:
+        requisitos_text = st.text_area("Pegar requisitos manualmente", height=200, placeholder="Copie y pegue aquí los requisitos...")
+
+with col2:
+    st.subheader("👤 2. Datos del Candidato")
+    nombre = st.text_input("Nombre Completo", placeholder="Ej: Juan Pérez")
+    identificacion = st.text_input("Identificación (ID)", placeholder="Ej: 123456789")
+    
+    st.subheader("📂 Soportes (Evidencias)")
+    soportes = st.file_uploader("Cargar Hojas de Vida y Soportes", type=["pdf"], accept_multiple_files=True, key="soportes")
+
+# --- BOTÓN DE ACCIÓN ---
+if st.button("AUDITAR CANDIDATO", type="primary"):
+    if not api_key:
+        st.error("❌ Por favor configura tu API Key en el menú lateral.")
+    elif not (requisitos_pdf or requisitos_text):
+        st.error("❌ Debes proporcionar los requisitos (PDF o Texto).")
+    elif not soportes:
+        st.error("❌ Debes subir al menos un soporte PDF.")
+    else:
+        with st.spinner("⏳ Analizando documentos con IA... Por favor espera."):
+            try:
+                # 1. Procesar Requisitos
+                texto_requisitos = ""
+                if requisitos_pdf:
+                    texto_requisitos += f"--- REQUISITOS (Desde PDF: {requisitos_pdf.name}) ---\n"
+                    texto_requisitos += extraer_texto_pdf(requisitos_pdf) + "\n"
+                if requisitos_text:
+                    texto_requisitos += f"\n--- REQUISITOS (Texto Adicional) ---\n{requisitos_text}\n"
+
+                # 2. Procesar Soportes
+                texto_evidencia = ""
+                for arch in soportes:
+                    texto_evidencia += f"\n--- SOPORTE: {arch.name} ---\n{extraer_texto_pdf(arch)}\n"
+
+                # 3. Construir Prompt
+                sena_instruction = """
+                Eres el Auditor de Contratación del SENA (Regional Huila).
+                Tu misión es validar rigurosamente si un candidato cumple con los requisitos para ser Instructor.
+
+                INSTRUCCIONES DE VALIDACIÓN:
+                1.  Analiza DETALLADAMENTE los "REQUISITOS DEL PERFIL" proporcionados.
+                2.  Revisa UNO A UNO los "DOCUMENTOS APORTADOS" (Soportes).
+                3.  Para cada requisito, busca la evidencia correspondiente en los soportes.
+                4.  Determina si el candidato "CUMPLE" o "NO CUMPLE" con cada requisito específico.
+                5.  Justifica tu decisión citando el documento y la página (si es posible) donde se encuentra la evidencia.
+                6.  Si un requisito no tiene soporte, marca "NO CUMPLE" y explica que falta la evidencia.
+
+                FORMATO DE SALIDA (Markdown):
+                -   Resumen del Perfil: Breve descripción del cargo.
+                -   Tabla de Cumplimiento:
+                    | Requisito | Estado (CUMPLE / NO CUMPLE) | Justificación / Evidencia |
+                    | :--- | :---: | :--- |
+                    | ... | ... | ... |
+                -   Conclusión Final: Párrafo indicando si el candidato es APTO o NO APTO para contratación, basado en si cumple TODOS los requisitos críticos.
+                """
+
+                prompt = f"""
+                CANDIDATO: {nombre} (ID: {identificacion})
+                
+                === PERFIL REQUERIDO Y REQUISITOS ===
+                {texto_requisitos}
+                
+                === DOCUMENTOS APORTADOS (EVIDENCIA) ===
+                {texto_evidencia}
+                """
+
+                # 4. Llamar a Gemini
+                model = genai.GenerativeModel(
+                    model_name="gemini-1.5-pro",
+                    generation_config={"temperature": 0.2},
+                    system_instruction=sena_instruction
+                )
+                
+                response = model.generate_content(prompt)
+                
+                # 5. Mostrar Resultados
+                st.markdown("<div class='result-container'>", unsafe_allow_html=True)
+                st.markdown("### 📊 Informe de Auditoría")
+                st.markdown(response.text)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            except Exception as e:
+                st.error(f"Ocurrió un error durante el análisis: {str(e)}")
