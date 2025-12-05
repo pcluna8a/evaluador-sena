@@ -200,32 +200,61 @@ def extraer_texto_pdf(uploaded_file):
     except Exception as e:
         return f"[Error leyendo PDF: {str(e)}]"
 
-def parse_markdown_table(markdown_text):
-    # Extraer la tabla del markdown usando regex
-    try:
-        lines = markdown_text.split('\n')
-        table_lines = [line for line in lines if '|' in line]
-        if len(table_lines) < 3: return None
-        
-        # Headers
-        headers = [h.strip() for h in table_lines[0].split('|') if h.strip()]
-        
-        # Data
-        data = []
-        for line in table_lines[2:]: # Skip header and separator
-            row = [cell.strip() for cell in line.split('|') if cell.strip()]
-            if len(row) == len(headers):
-                data.append(row)
-                
-        return pd.DataFrame(data, columns=headers)
-    except:
-        return None
+import json
+import openpyxl
+from openpyxl.styles import Alignment
 
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Evaluacion')
-    return output.getvalue()
+# ... (previous code)
+
+# --- LÓGICA DE NEGOCIO ---
+def extraer_texto_pdf(uploaded_file):
+    try:
+        reader = PdfReader(uploaded_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+        return text
+    except Exception as e:
+        return f"[Error leyendo PDF: {str(e)}]"
+
+def fill_excel_template(data_json, template_path="2026_IDONEIDAD.xlsx"):
+    try:
+        wb = openpyxl.load_workbook(template_path)
+        ws = wb.active
+        
+        # 1. Datos Personales
+        # Ajustar coordenadas según inspección (G10, F11)
+        if 'nombre' in data_json:
+            ws['G10'] = data_json['nombre']
+        if 'cedula' in data_json:
+            ws['F11'] = data_json['cedula']
+            
+        # 2. Idoneidad y Formación (Cajas de Texto)
+        if 'idoneidad_texto' in data_json:
+            ws['D14'] = data_json['idoneidad_texto']
+            # Ajustar alineación para texto largo
+            ws['D14'].alignment = Alignment(wrap_text=True, vertical='top')
+            
+        if 'formacion_texto' in data_json:
+            ws['I15'] = data_json['formacion_texto']
+            ws['I15'].alignment = Alignment(wrap_text=True, vertical='top')
+            
+        # 3. Tabla de Experiencia (Desde fila 24)
+        if 'experiencia_lista' in data_json:
+            start_row = 24
+            for i, exp in enumerate(data_json['experiencia_lista']):
+                current_row = start_row + i
+                # D: Empresa, E: Inicio, F: Fin
+                ws[f'D{current_row}'] = exp.get('empresa', '')
+                ws[f'E{current_row}'] = exp.get('fecha_inicio', '')
+                ws[f'F{current_row}'] = exp.get('fecha_fin', '')
+                # Calcular tiempo si es posible (Opcional, por ahora dejar que Excel calcule o AI lo de)
+                
+        output = io.BytesIO()
+        wb.save(output)
+        return output.getvalue()
+    except Exception as e:
+        return None
 
 # --- INTERFAZ PRINCIPAL ---
 col1, col2 = st.columns(2)
@@ -273,62 +302,71 @@ if st.button("EVALUAR CANDIDATO", type="primary"):
                 for arch in soportes:
                     texto_evidencia += f"\n--- SOPORTE: {arch.name} ---\n{extraer_texto_pdf(arch)}\n"
 
-                # 3. Construir Prompt
+                # 3. Construir Prompt JSON
                 sena_instruction = """
-                Eres el Auditor de Contratación del SENA (Regional Huila).
-                Tu misión es validar rigurosamente si un candidato cumple con los requisitos para ser Instructor.
+                Eres el Auditor de Contratación del SENA.
+                Tu tarea es extraer información estructurada y validar requisitos.
 
-                INSTRUCCIONES DE VALIDACIÓN:
-                1.  Analiza DETALLADAMENTE los "REQUISITOS DEL PERFIL" proporcionados.
-                2.  Revisa UNO A UNO los "DOCUMENTOS APORTADOS" (Soportes).
-                3.  Para cada requisito, busca la evidencia correspondiente en los soportes.
-                4.  Determina si el candidato "CUMPLE" o "NO CUMPLE" con cada requisito específico.
-                5.  Justifica tu decisión citando el documento y la página (si es posible) donde se encuentra la evidencia.
-                6.  Si un requisito no tiene soporte, marca "NO CUMPLE" y explica que falta la evidencia.
-
-                FORMATO DE SALIDA (Markdown):
-                -   Resumen del Perfil: Breve descripción del cargo.
-                -   Tabla de Cumplimiento:
-                    | Requisito | Estado (CUMPLE / NO CUMPLE) | Justificación / Evidencia |
-                    | :--- | :---: | :--- |
-                    | ... | ... | ... |
-                -   Conclusión Final: Párrafo indicando si el candidato es APTO o NO APTO para contratación, basado en si cumple TODOS los requisitos críticos.
+                SALIDA ESPERADA (JSON ÚNICAMENTE):
+                Debes responder con un objeto JSON válido con la siguiente estructura:
+                {
+                    "nombre": "Nombre del candidato",
+                    "cedula": "ID del candidato",
+                    "idoneidad_texto": "Resumen narrativo de la idoneidad del candidato. Menciona si CUMPLE o NO CUMPLE los requisitos claves. Justifica brevemente.",
+                    "formacion_texto": "Lista de títulos académicos encontrados (Pregrado, Postgrado, etc.)",
+                    "experiencia_lista": [
+                        {"empresa": "Nombre Empresa 1", "fecha_inicio": "DD/MM/AAAA", "fecha_fin": "DD/MM/AAAA"},
+                        {"empresa": "Nombre Empresa 2", "fecha_inicio": "DD/MM/AAAA", "fecha_fin": "DD/MM/AAAA"}
+                    ],
+                    "analisis_detallado_markdown": "Aquí pon la tabla de cumplimiento detallada en formato Markdown como se hacía antes."
+                }
+                
+                No incluyas bloques de código ```json ... ```, solo el JSON puro.
                 """
 
                 prompt = f"""
                 CANDIDATO: {nombre} (ID: {identificacion})
                 
-                === PERFIL REQUERIDO Y REQUISITOS ===
+                === PERFIL REQUERIDO ===
                 {texto_requisitos}
                 
-                === DOCUMENTOS APORTADOS (EVIDENCIA) ===
+                === DOCUMENTOS ===
                 {texto_evidencia}
                 """
 
                 # 4. Llamar a Gemini
                 model = genai.GenerativeModel(
                     model_name="gemini-1.5-pro",
-                    generation_config={"temperature": 0.2},
+                    generation_config={"temperature": 0.1, "response_mime_type": "application/json"},
                     system_instruction=sena_instruction
                 )
                 
                 response = model.generate_content(prompt)
                 
-                # 5. Mostrar Resultados
+                # Parsear JSON
+                data_json = json.loads(response.text)
+                
+                # 5. Mostrar Resultados (Markdown)
                 st.markdown("<div class='result-container'>", unsafe_allow_html=True)
                 st.markdown("### 📊 Informe de Auditoría")
-                st.markdown(response.text)
                 
-                # 6. Exportar a Excel
-                df = parse_markdown_table(response.text)
-                if df is not None:
-                    excel_data = to_excel(df)
+                if 'analisis_detallado_markdown' in data_json:
+                    st.markdown(data_json['analisis_detallado_markdown'])
+                else:
+                    st.markdown(data_json.get('idoneidad_texto', 'Sin análisis.'))
+                
+                # 6. Exportar a Excel (Plantilla)
+                excel_data = fill_excel_template(data_json)
+                
+                if excel_data:
                     st.download_button(
-                        label="📥 Descargar Informe en Excel",
+                        label="📥 Descargar Formato 2026_IDONEIDAD Diligenciado",
                         data=excel_data,
-                        file_name=f"Evaluacion_{nombre.replace(' ', '_')}.xlsx",
+                        file_name=f"IDONEIDAD_{nombre.replace(' ', '_')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
+                else:
+                    st.error("No se pudo generar el archivo Excel.")
                 
                 st.markdown("</div>", unsafe_allow_html=True)
 
