@@ -1,7 +1,8 @@
-import streamlit as st
-import google.generativeai as genai
-from pypdf import PdfReader
-import os
+import pandas as pd
+import io
+import re
+
+# ... (imports remain)
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -156,6 +157,11 @@ st.markdown("""
             text-align: left;
             border-bottom: 1px solid #eee;
         }
+        
+        /* LOGO VERDE (Filtro CSS) */
+        [data-testid="stSidebar"] img {
+            filter: hue-rotate(95deg) brightness(0.9) saturate(1.5);
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -194,6 +200,33 @@ def extraer_texto_pdf(uploaded_file):
     except Exception as e:
         return f"[Error leyendo PDF: {str(e)}]"
 
+def parse_markdown_table(markdown_text):
+    # Extraer la tabla del markdown usando regex
+    try:
+        lines = markdown_text.split('\n')
+        table_lines = [line for line in lines if '|' in line]
+        if len(table_lines) < 3: return None
+        
+        # Headers
+        headers = [h.strip() for h in table_lines[0].split('|') if h.strip()]
+        
+        # Data
+        data = []
+        for line in table_lines[2:]: # Skip header and separator
+            row = [cell.strip() for cell in line.split('|') if cell.strip()]
+            if len(row) == len(headers):
+                data.append(row)
+                
+        return pd.DataFrame(data, columns=headers)
+    except:
+        return None
+
+def to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Evaluacion')
+    return output.getvalue()
+
 # --- INTERFAZ PRINCIPAL ---
 col1, col2 = st.columns(2)
 
@@ -217,7 +250,7 @@ with col2:
     soportes = st.file_uploader("Cargar Hojas de Vida y Soportes", type=["pdf"], accept_multiple_files=True, key="soportes")
 
 # --- BOTÓN DE ACCIÓN ---
-if st.button("AUDITAR CANDIDATO", type="primary"):
+if st.button("EVALUAR CANDIDATO", type="primary"):
     if not api_key:
         st.error("❌ Por favor configura tu API Key en el menú lateral.")
     elif not (requisitos_pdf or requisitos_text):
@@ -285,6 +318,18 @@ if st.button("AUDITAR CANDIDATO", type="primary"):
                 st.markdown("<div class='result-container'>", unsafe_allow_html=True)
                 st.markdown("### 📊 Informe de Auditoría")
                 st.markdown(response.text)
+                
+                # 6. Exportar a Excel
+                df = parse_markdown_table(response.text)
+                if df is not None:
+                    excel_data = to_excel(df)
+                    st.download_button(
+                        label="📥 Descargar Informe en Excel",
+                        data=excel_data,
+                        file_name=f"Evaluacion_{nombre.replace(' ', '_')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                
                 st.markdown("</div>", unsafe_allow_html=True)
 
             except Exception as e:
