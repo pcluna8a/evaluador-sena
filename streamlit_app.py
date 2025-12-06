@@ -1,4 +1,4 @@
-```python
+
 import streamlit as st
 import google.generativeai as genai
 from pypdf import PdfReader
@@ -420,4 +420,4 @@ if st.button("🚀 EVALUAR CANDIDATO", type="primary"):
                 st.error(f"Ocurrió un error: {str(e)}")
                 with st.expander("Ver detalle técnico"):
                     st.code(str(e))
-```
+
