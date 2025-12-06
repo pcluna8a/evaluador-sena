@@ -226,6 +226,21 @@ def cargar_imagen(uploaded_file):
     except Exception as e:
         return None
 
+def optimize_image(image, max_size=(1024, 1024)):
+    """Redimensiona y optimiza la imagen para reducir latencia."""
+    try:
+        # Redimensionar si es muy grande (mantiene relación de aspecto)
+        if image.width > max_size[0] or image.height > max_size[1]:
+            image.thumbnail(max_size, Image.Resampling.LANCZOS)
+        
+        # Convertir a RGB (elimina canal Alpha que pesa más)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+            
+        return image
+    except Exception as e:
+        return None
+
 def fill_excel_template(data_json, template_path="2026_IDONEIDAD.xlsx"):
     try:
         if not os.path.exists(template_path):
@@ -366,8 +381,11 @@ if st.button("🚀 EVALUAR CANDIDATO", type="primary"):
                     elif archivo.type in ["image/png", "image/jpeg", "image/jpg"]:
                         img = cargar_imagen(archivo)
                         if img:
-                            gemini_content.append(f"IMAGEN ({archivo.name}):")
-                            gemini_content.append(img)
+                            # Optimizar imagen antes de enviar
+                            img_opt = optimize_image(img)
+                            if img_opt:
+                                gemini_content.append(f"IMAGEN ({archivo.name}):")
+                                gemini_content.append(img_opt)
 
                 # 3. Llamada al Modelo
                 model = genai.GenerativeModel("gemini-2.0-flash", generation_config={"response_mime_type": "application/json"})
