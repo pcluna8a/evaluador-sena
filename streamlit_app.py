@@ -1,27 +1,28 @@
-import pandas as pd
-import io
-import re
-
+```python
 import streamlit as st
 import google.generativeai as genai
 from pypdf import PdfReader
+from PIL import Image
 import os
 import json
 import openpyxl
 from openpyxl.styles import Alignment
+import io
+import re
+import pandas as pd
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
-    page_title="SENA CIES - Validador de Instructores",
+    page_title="Evaluador SENA 2025",
     page_icon="✅",
     layout="wide"
 )
 
 # --- SIDEBAR / CONFIGURACIÓN ---
 with st.sidebar:
-    # Logo Oficial SENA (Sin filtros)
-    st.image("https://www.sena.edu.co/Style%20Library/alayout/images/logoSena.png", width=150)
-    st.header("Configuración")
+    # Logo Oficial SENA
+    st.image("https://www.sena.edu.co/Style%20Library/alayout/images/logoSena.png", width=180)
+    st.markdown("### Configuración")
     
     # Dark Mode Toggle
     dark_mode = st.toggle("🌙 Modo Oscuro", value=False)
@@ -29,65 +30,53 @@ with st.sidebar:
     # API Key Management
     api_key = os.environ.get("GOOGLE_API_KEY")
     if not api_key:
-        api_key = st.text_input("Ingresa tu Google API Key", type="password")
+        api_key = st.text_input("🔑 Google API Key", type="password")
     
     if api_key:
         genai.configure(api_key=api_key)
-        st.success("API Key configurada")
     else:
-        st.warning("Necesitas una API Key para continuar.")
+        st.warning("⚠️ API Key requerida.")
 
-    # --- SECCIÓN COMPARTIR (NUEVO) ---
+    # --- SECCIÓN COMPARTIR ---
     st.markdown("---")
-    st.header("🔗 Compartir App")
+    st.markdown("### 🔗 Compartir")
     import pyshorteners
     
-    # Intentar obtener la URL base (experimental) o pedirla
-    app_url = st.text_input("Pega aquí la URL de tu App:", placeholder="https://...")
-    
-    if app_url:
-        if st.button("Generar Short URL"):
-            try:
-                s = pyshorteners.Shortener()
-                short_url = s.tinyurl.short(app_url)
-                st.success("¡URL Acortada!")
-                st.code(short_url, language="text")
-            except Exception as e:
-                st.error(f"Error al acortar: {str(e)}")
+    app_url = st.text_input("URL de la App:", placeholder="https://...")
+    if app_url and st.button("Generar Link Corto"):
+        try:
+            s = pyshorteners.Shortener()
+            st.code(s.tinyurl.short(app_url), language="text")
+        except:
+            st.error("Error al generar link.")
 
-# --- ESTILOS CSS DINÁMICOS ---
-
-# --- ESTILOS CSS DINÁMICOS ---
+# --- ESTILOS CSS DINÁMICOS (MODERNO & INSTITUCIONAL) ---
 if dark_mode:
-    # Variables Modo Oscuro
-    bg_color = "#0e1117"
-    text_color = "#fafafa"
-    card_bg = "#262730"
-    input_bg = "#1e1e1e"
+    bg_color = "#121212"
+    text_color = "#E0E0E0"
+    card_bg = "#1E1E1E"
+    input_bg = "#2C2C2C"
     border_color = "#444"
-    header_text = "#ffffff"
+    header_text = "#FFFFFF"
 else:
-    # Variables Modo Claro (Original)
-    bg_color = "#f4f7f6"
-    text_color = "#333"
-    card_bg = "white"
-    input_bg = "white"
-    border_color = "#ddd"
-    header_text = "#00324d"
+    bg_color = "#F4F6F8"
+    text_color = "#2C3E50"
+    card_bg = "#FFFFFF"
+    input_bg = "#FFFFFF"
+    border_color = "#E0E0E0"
+    header_text = "#00324D"
 
 st.markdown(f"""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
         :root {{
-            /* COLORES INSTITUCIONALES SENA */
-            --sena-green: #39A900;       /* Principal */
-            --sena-dark-blue: #00324D;   /* Principal */
-            --sena-light-blue: #82DEF0;  /* Principal */
-            --sena-yellow: #FFCE40;      /* Secundario */
-            --sena-dark-grey: #385C57;   /* Secundario */
+            --sena-green: #39A900;
+            --sena-dark-blue: #00324D;
+            --sena-light-blue: #82DEF0;
+            --sena-yellow: #FFCE40;
+            --sena-dark-grey: #385C57;
             
-            /* Variables de Tema */
             --bg-color: {bg_color};
             --text-color: {text_color};
             --card-bg: {card_bg};
@@ -96,150 +85,128 @@ st.markdown(f"""
             --header-text: {header_text};
         }}
 
-        /* Override Streamlit Defaults */
         .stApp {{
             background-color: var(--bg-color);
-            font-family: 'Segoe UI', sans-serif;
+            font-family: 'Inter', sans-serif;
             color: var(--text-color);
         }}
         
-        /* Ocultar elementos nativos de Streamlit que no queremos */
-        #MainMenu {{visibility: hidden;}}
-        footer {{visibility: hidden;}}
-        header {{visibility: hidden;}}
+        #MainMenu, footer, header {{visibility: hidden;}}
 
-        /* Encabezado Personalizado */
+        /* Encabezado Moderno */
         .main-header {{
-            background-color: var(--sena-green);
-            padding: 1.5rem;
+            background: linear-gradient(135deg, var(--sena-green) 0%, #2E8B00 100%);
+            padding: 2rem;
             text-align: center;
             color: white;
-            border-bottom: 5px solid var(--sena-dark-blue);
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border-radius: 0 0 10px 10px;
+            border-bottom: 6px solid var(--sena-dark-blue);
+            margin-bottom: 2.5rem;
+            box-shadow: 0 10px 20px rgba(57, 169, 0, 0.15);
+            border-radius: 0 0 20px 20px;
         }}
         .main-header h1 {{ 
-            color: white; 
-            margin: 0; 
-            font-size: 1.8rem; 
-            font-family: 'Segoe UI', sans-serif;
-            font-weight: 700;
+            color: white; margin: 0; font-size: 2.2rem; font-weight: 700; letter-spacing: -0.5px;
         }}
         .main-header h2 {{ 
-            color: white; 
-            margin: 0.5rem 0 0; 
-            font-size: 1.2rem; 
-            font-weight: 400; 
-            opacity: 0.9; 
-            font-family: 'Segoe UI', sans-serif;
+            color: rgba(255,255,255,0.9); margin-top: 0.5rem; font-size: 1.1rem; font-weight: 400;
         }}
 
-        /* Paneles (Contenedores de Streamlit) */
+        /* Tarjetas (Cards) */
         div[data-testid="stVerticalBlock"] > div {{
             background-color: var(--card-bg);
-            padding: 1rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            padding: 1.5rem;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            transition: transform 0.2s ease;
         }}
         
-        /* Headers de los paneles */
         h3 {{
             color: var(--header-text) !important;
             font-weight: 700 !important;
-            font-size: 1.2rem !important;
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 1rem;
+            font-size: 1.1rem !important;
+            border-bottom: 2px solid var(--sena-yellow);
+            padding-bottom: 0.8rem;
             margin-bottom: 1.5rem;
-            font-family: 'Segoe UI', sans-serif !important;
+            display: inline-block;
         }}
 
-        /* Inputs y TextAreas */
+        /* Inputs Modernos */
         .stTextInput input, .stTextArea textarea {{
             background-color: var(--input-bg);
             color: var(--text-color);
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 12px;
-            transition: border-color 0.3s;
+            border-radius: 10px;
+            padding: 14px;
         }}
         .stTextInput input:focus, .stTextArea textarea:focus {{
             border-color: var(--sena-green) !important;
-            box-shadow: none !important;
-        }}
-        
-        /* Labels de inputs */
-        .stTextInput label, .stTextArea label, .stFileUploader label {{
-            color: var(--text-color) !important;
+            box-shadow: 0 0 0 2px rgba(57, 169, 0, 0.1) !important;
         }}
 
         /* Botón Principal */
         .stButton button {{
-            background-color: var(--sena-dark-blue) !important;
+            background: var(--sena-dark-blue) !important;
             color: white !important;
             border: none !important;
-            padding: 15px 25px !important;
-            font-size: 1rem !important;
-            font-weight: bold !important;
-            border-radius: 8px !important;
-            cursor: pointer !important;
+            padding: 16px 32px !important;
+            font-size: 1.1rem !important;
+            font-weight: 600 !important;
+            border-radius: 12px !important;
             width: 100% !important;
-            transition: background 0.3s, transform 0.1s !important;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+            box-shadow: 0 4px 12px rgba(0, 50, 77, 0.2) !important;
+            transition: all 0.3s ease !important;
         }}
         .stButton button:hover {{
-            background-color: #004d73 !important;
-            transform: translateY(-1px) !important;
-        }}
-        .stButton button:active {{
-            transform: translateY(1px) !important;
+            background: #004466 !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 8px 16px rgba(0, 50, 77, 0.3) !important;
         }}
 
         /* Resultados */
         .result-container {{
             background-color: var(--card-bg);
-            padding: 2.5rem;
-            margin-top: 1rem;
-            border-radius: 12px;
-            border-top: 6px solid var(--sena-yellow); /* Usando Amarillo Secundario */
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-            color: var(--text-color);
+            padding: 2rem;
+            border-radius: 16px;
+            border-left: 6px solid var(--sena-green);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+            margin-top: 2rem;
         }}
         
-        /* Markdown en Resultados */
-        .result-container h1, .result-container h2, .result-container h3 {{
-            color: var(--header-text);
-            margin-top: 1.5rem;
-            border-bottom: none;
-        }}
+        .result-container h1, .result-container h2 {{ color: var(--header-text); border: none; }}
         
-        /* Tablas en Resultados */
+        /* Tablas */
         .result-container table {{
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             margin: 20px 0;
-            font-size: 0.95rem;
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
-            box-shadow: 0 0 0 1px var(--border-color);
-            color: var(--text-color);
+            border: 1px solid var(--border-color);
         }}
         .result-container th {{
-            background-color: var(--input-bg);
-            color: var(--header-text);
-            font-weight: 700;
-            text-transform: uppercase;
-            font-size: 0.85rem;
-            padding: 12px 15px;
+            background-color: var(--sena-dark-blue);
+            color: white;
+            font-weight: 600;
+            padding: 14px;
             text-align: left;
-            border-bottom: 2px solid var(--border-color);
         }}
         .result-container td {{
-            padding: 12px 15px;
-            text-align: left;
+            padding: 14px;
             border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
         }}
+        .result-container tr:last-child td {{ border-bottom: none; }}
     </style>
+""", unsafe_allow_html=True)
+
+# --- HEADER ---
+st.markdown("""
+    <div class="main-header">
+        <h1>Evaluador de Idoneidad SENA 2025</h1>
+        <h2>Análisis Inteligente de Perfiles y Experiencia</h2>
+    </div>
 """, unsafe_allow_html=True)
 
 # --- LÓGICA DE NEGOCIO ---
@@ -251,23 +218,25 @@ def extraer_texto_pdf(uploaded_file):
             text += page.extract_text() + "\n"
         return text
     except Exception as e:
-        return f"[Error leyendo PDF: {str(e)}]"
+        return f"[Error PDF: {str(e)}]"
+
+def cargar_imagen(uploaded_file):
+    try:
+        return Image.open(uploaded_file)
+    except Exception as e:
+        return None
 
 def fill_excel_template(data_json, template_path="2026_IDONEIDAD.xlsx"):
     try:
         if not os.path.exists(template_path):
-            return None, f"El archivo plantilla '{template_path}' no se encuentra en el servidor."
+            return None, f"Plantilla '{template_path}' no encontrada."
 
         wb = openpyxl.load_workbook(template_path)
         ws = wb.active
         
-        # 1. Datos Personales
-        if 'nombre' in data_json:
-            ws['G10'] = data_json['nombre']
-        if 'cedula' in data_json:
-            ws['F11'] = data_json['cedula']
-            
-        # 2. Idoneidad y Formación
+        if 'nombre' in data_json: ws['G10'] = data_json['nombre']
+        if 'cedula' in data_json: ws['F11'] = data_json['cedula']
+        
         if 'idoneidad_texto' in data_json:
             ws['D14'] = data_json['idoneidad_texto']
             ws['D14'].alignment = Alignment(wrap_text=True, vertical='top')
@@ -276,14 +245,14 @@ def fill_excel_template(data_json, template_path="2026_IDONEIDAD.xlsx"):
             ws['I15'] = data_json['formacion_texto']
             ws['I15'].alignment = Alignment(wrap_text=True, vertical='top')
             
-        # 3. Tabla de Experiencia
         if 'experiencia_lista' in data_json:
             start_row = 24
             for i, exp in enumerate(data_json['experiencia_lista']):
-                current_row = start_row + i
-                ws[f'D{current_row}'] = exp.get('empresa', '')
-                ws[f'E{current_row}'] = exp.get('fecha_inicio', '')
-                ws[f'F{current_row}'] = exp.get('fecha_fin', '')
+                if i > 10: break # Limite de filas en plantilla
+                row = start_row + i
+                ws[f'D{row}'] = exp.get('empresa', '')
+                ws[f'E{row}'] = exp.get('fecha_inicio', '')
+                ws[f'F{row}'] = exp.get('fecha_fin', '')
                 
         output = io.BytesIO()
         wb.save(output)
@@ -291,195 +260,164 @@ def fill_excel_template(data_json, template_path="2026_IDONEIDAD.xlsx"):
     except Exception as e:
         return None, str(e)
 
+def clean_and_parse_json(text):
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            text = re.sub(r"```json\s*", "", text)
+            text = re.sub(r"```\s*$", "", text)
+            text = text.strip()
+            text = text.replace('\n', '\\n').replace('\r', '').replace('\t', '\\t')
+            return json.loads(text, strict=False)
+        except:
+            raise
+
 # --- INTERFAZ PRINCIPAL ---
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1, 1.2], gap="large")
 
 with col1:
-    st.subheader("📋 1. Requisitos del Perfil")
-    
-    tab_pdf, tab_text = st.tabs(["Subir PDF", "Pegar Texto"])
-    
+    st.subheader("📋 1. Perfil Requerido")
+    tab_pdf, tab_text = st.tabs(["📄 Subir PDF", "✍️ Pegar Texto"])
     with tab_pdf:
         requisitos_pdf = st.file_uploader("Cargar PDF del Perfil", type=["pdf"], key="req_pdf")
-    
     with tab_text:
-        requisitos_text = st.text_area("Pegar requisitos manualmente", height=200, placeholder="Copie y pegue aquí los requisitos...")
+        requisitos_text = st.text_area("Requisitos manuales", height=150, placeholder="Pegue aquí los requisitos...")
 
 with col2:
-    st.subheader("👤 2. Datos del Candidato")
-    nombre = st.text_input("Nombre Completo", placeholder="Ej: Juan Pérez")
-    identificacion = st.text_input("Identificación (ID)", placeholder="Ej: 123456789")
+    st.subheader("👤 2. Candidato y Soportes")
+    c1, c2 = st.columns(2)
+    with c1: nombre = st.text_input("Nombre Completo")
+    with c2: identificacion = st.text_input("Identificación")
     
-    st.subheader("📂 Soportes (Evidencias)")
-    soportes = st.file_uploader("Cargar Hojas de Vida y Soportes", type=["pdf"], accept_multiple_files=True, key="soportes")
+    st.info("📂 Soporta PDF, JPG y PNG")
+    soportes = st.file_uploader("Cargar Evidencias (Diploma, Actas, Certificados)", 
+                               type=["pdf", "jpg", "jpeg", "png"], 
+                               accept_multiple_files=True, 
+                               key="soportes")
 
 # --- BOTÓN DE ACCIÓN ---
-if st.button("EVALUAR CANDIDATO", type="primary"):
+st.markdown("<br>", unsafe_allow_html=True)
+if st.button("🚀 EVALUAR CANDIDATO", type="primary"):
     if not api_key:
-        st.error("❌ Por favor configura tu API Key en el menú lateral.")
+        st.error("❌ Falta la API Key.")
     elif not (requisitos_pdf or requisitos_text):
-        st.error("❌ Debes proporcionar los requisitos (PDF o Texto).")
+        st.error("❌ Faltan los Requisitos.")
     elif not soportes:
-        st.error("❌ Debes subir al menos un soporte PDF.")
+        st.error("❌ Faltan los Soportes.")
     else:
-        with st.spinner("⏳ Analizando documentos con IA... Por favor espera."):
+        with st.spinner("🧠 Analizando documentos e imágenes... Calculando tiempos..."):
             try:
-                # 1. Procesar Requisitos
-                texto_requisitos = ""
+                # 1. Preparar Contexto de Requisitos
+                req_content = ""
                 if requisitos_pdf:
-                    texto_requisitos += f"--- REQUISITOS (Desde PDF: {requisitos_pdf.name}) ---\n"
-                    texto_requisitos += extraer_texto_pdf(requisitos_pdf) + "\n"
+                    req_content += f"REQUISITOS (PDF): {extraer_texto_pdf(requisitos_pdf)}\n"
                 if requisitos_text:
-                    texto_requisitos += f"\n--- REQUISITOS (Texto Adicional) ---\n{requisitos_text}\n"
+                    req_content += f"REQUISITOS (TXT): {requisitos_text}\n"
 
-                # 2. Procesar Soportes
-                texto_evidencia = ""
-                for arch in soportes:
-                    texto_evidencia += f"\n--- SOPORTE: {arch.name} ---\n{extraer_texto_pdf(arch)}\n"
-
-                # 3. Construir Prompt JSON
-                sena_instruction = """
+                # 2. Preparar Contenido Multimodal para Gemini
+                gemini_content = []
+                
+                # Prompt del Sistema (Instrucciones)
+                system_prompt = f"""
                 Eres el Auditor de Contratación del SENA.
-                Tu tarea PRINCIPAL es determinar si el candidato CUMPLE o NO CUMPLE.
                 
-                CRITERIO DE EVALUACIÓN:
-                - Para dictaminar "CUMPLE", el candidato debe cumplir con EL 100% de los requisitos de Formación y Experiencia.
-                - Si falta UN SOLO requisito (ej: falta tiempo de experiencia, título no afín), el dictamen es "NO CUMPLE".
+                OBJETIVO:
+                Determinar si el candidato {nombre} (ID: {identificacion}) CUMPLE o NO CUMPLE con el perfil.
+                
+                INSTRUCCIONES CLAVE:
+                1. ANALIZA todos los documentos (PDFs e IMÁGENES). Extrae fechas y datos clave.
+                2. SUMATORIA DE EXPERIENCIA:
+                   - Debes SUMAR el tiempo de todas las certificaciones laborales válidas.
+                   - Compara la SUMA TOTAL vs el TIEMPO REQUERIDO en el perfil.
+                   - Si la suma es menor al requerido -> NO CUMPLE.
+                3. FORMACIÓN: Verifica que los títulos coincidan con lo exigido.
 
-                SALIDA ESPERADA (JSON ÚNICAMENTE):
-                {
-                    "nombre": "Nombre del candidato",
-                    "cedula": "ID del candidato",
-                    "concepto_final": "CUMPLE o NO CUMPLE",
-                    "idoneidad_texto": "Justificación detallada del concepto final.",
-                    "formacion_texto": "Lista detallada de títulos académicos encontrados.",
+                SALIDA JSON OBLIGATORIA:
+                {{
+                    "nombre": "{nombre}",
+                    "cedula": "{identificacion}",
+                    "concepto_final": "CUMPLE (Solo si cumple 100% formación Y tiempo total experiencia) o NO CUMPLE",
+                    "idoneidad_texto": "CONCLUSIÓN: [CUMPLE/NO CUMPLE]. Justificación: El perfil requiere X meses. El candidato demostró Y meses en total. (Detallar suma).",
+                    "formacion_texto": "Lista de títulos encontrados.",
                     "experiencia_lista": [
-                        {
-                            "empresa": "Nombre Empresa", 
-                            "fecha_inicio": "DD/MM/AAAA", 
+                        {{
+                            "empresa": "Nombre",
+                            "fecha_inicio": "DD/MM/AAAA",
                             "fecha_fin": "DD/MM/AAAA",
-                            "meses": "Número de meses (entero)",
-                            "dias": "Número de días (entero)",
-                            "validada": "Si o No (Basado en si cumple con la experiencia relacionada requerida)"
-                        }
+                            "meses": 12,
+                            "dias": 0,
+                            "validada": "Si/No"
+                        }}
                     ],
-                    "analisis_detallado_markdown": "Tabla Markdown detallada de cumplimiento."
-                }
+                    "analisis_detallado_markdown": "Tabla resumen en Markdown."
+                }}
                 """
+                
+                gemini_content.append(system_prompt)
+                gemini_content.append(f"=== PERFIL REQUERIDO ===\n{req_content}")
+                gemini_content.append("=== EVIDENCIAS DEL CANDIDATO ===")
 
-                prompt = f"""
-                CANDIDATO: {nombre} (ID: {identificacion})
-                
-                === PERFIL REQUERIDO ===
-                {texto_requisitos}
-                
-                === DOCUMENTOS ===
-                {texto_evidencia}
-                """
+                # Procesar Soportes (PDF Texto + Imágenes)
+                for archivo in soportes:
+                    if archivo.type == "application/pdf":
+                        text = extraer_texto_pdf(archivo)
+                        gemini_content.append(f"DOCUMENTO PDF ({archivo.name}):\n{text}")
+                    elif archivo.type in ["image/png", "image/jpeg", "image/jpg"]:
+                        img = cargar_imagen(archivo)
+                        if img:
+                            gemini_content.append(f"IMAGEN ({archivo.name}):")
+                            gemini_content.append(img)
 
-                # 4. Llamar a Gemini (Modelo Disponible: Gemini 2.0 Flash)
-                model = genai.GenerativeModel(
-                    model_name="gemini-2.0-flash",
-                    generation_config={"temperature": 0.1, "response_mime_type": "application/json"},
-                    system_instruction=sena_instruction
-                )
+                # 3. Llamada al Modelo
+                model = genai.GenerativeModel("gemini-2.0-flash", generation_config={"response_mime_type": "application/json"})
+                response = model.generate_content(gemini_content)
                 
-                response = model.generate_content(prompt)
+                # 4. Procesar Respuesta
+                data_json = clean_and_parse_json(response.text)
                 
-                # Función para limpiar y parsear JSON de forma robusta
-                def clean_and_parse_json(text):
-                    try:
-                        # 1. Intentar parseo directo
-                        return json.loads(text)
-                    except json.JSONDecodeError:
-                        try:
-                            # 2. Limpiar Markdown (```json ... ```)
-                            text = re.sub(r"```json\s*", "", text)
-                            text = re.sub(r"```\s*$", "", text)
-                            text = text.strip()
-                            
-                            # 3. Escapar caracteres de control problemáticos dentro de cadenas
-                            # Esto es un intento básico, para casos complejos se requeriría un parser más avanzado
-                            text = text.replace('\n', '\\n').replace('\r', '').replace('\t', '\\t')
-                            
-                            return json.loads(text, strict=False)
-                        except Exception as e:
-                            raise e
-
-                # Parsear JSON con manejo de errores
-                try:
-                    data_json = clean_and_parse_json(response.text)
-                except Exception as e:
-                    st.error(f"Error al procesar la respuesta de la IA: {str(e)}")
-                    with st.expander("Ver respuesta cruda (para depuración)"):
-                        st.code(response.text)
-                    st.stop()
-                
-                # 5. Mostrar Resultados (Markdown)
+                # 5. Visualización
                 st.markdown("<div class='result-container'>", unsafe_allow_html=True)
                 
-                # --- DICTAMEN FINAL VISUAL ---
                 concepto = data_json.get('concepto_final', 'NO CUMPLE').upper()
-                if "CUMPLE" in concepto and "NO" not in concepto:
-                    st.markdown("""
-                        <div style='background-color: #39a900; color: white; padding: 20px; border-radius: 10px; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
-                            ✅ EL CANDIDATO CUMPLE CON EL PERFIL
-                        </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown("""
-                        <div style='background-color: #fc7323; color: white; padding: 20px; border-radius: 10px; text-align: center; font-size: 24px; font-weight: bold; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
-                            ⚠️ EL CANDIDATO NO CUMPLE CON EL PERFIL
-                        </div>
-                    """, unsafe_allow_html=True)
-
-                st.markdown("### 📊 Informe de Auditoría")
+                color_banner = "#39A900" if "CUMPLE" in concepto and "NO" not in concepto else "#FC7323"
+                icon_banner = "✅" if "CUMPLE" in concepto and "NO" not in concepto else "⚠️"
                 
+                st.markdown(f"""
+                    <div style='background-color: {color_banner}; color: white; padding: 20px; border-radius: 12px; text-align: center; font-size: 24px; font-weight: 700; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);'>
+                        {icon_banner} {concepto}
+                    </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("### 📊 Análisis de Idoneidad")
                 if 'analisis_detallado_markdown' in data_json:
                     st.markdown(data_json['analisis_detallado_markdown'])
                 else:
-                    st.markdown(data_json.get('idoneidad_texto', 'Sin análisis.'))
+                    st.markdown(data_json.get('idoneidad_texto', ''))
                 
-                # --- NUEVO: TABLA DE EXPERIENCIA PREVIA ---
-                st.markdown("### 🗓️ Detalle de Experiencia Laboral")
+                st.markdown("### 🗓️ Detalle de Experiencia (Sumatoria)")
                 if 'experiencia_lista' in data_json and data_json['experiencia_lista']:
-                    # Crear DataFrame para mostrar
                     df_exp = pd.DataFrame(data_json['experiencia_lista'])
-                    
-                    # Renombrar columnas para que coincidan con lo solicitado
-                    column_mapping = {
-                        'empresa': 'NOMBRE EMPRESA',
-                        'fecha_inicio': 'FECHA INICIO',
-                        'fecha_fin': 'FECHA FINAL',
-                        'meses': 'MESES',
-                        'dias': 'DÍAS',
-                        'validada': 'VALIDADA (Si/No)'
-                    }
-                    
-                    # Asegurar que existan las columnas aunque vengan vacías
-                    for col in column_mapping.keys():
-                        if col not in df_exp.columns:
-                            df_exp[col] = ""
-                            
-                    df_display = df_exp[list(column_mapping.keys())].rename(columns=column_mapping)
-                    st.table(df_display)
+                    st.table(df_exp)
                 else:
-                    st.info("No se detectó experiencia laboral estructurada.")
+                    st.info("No se extrajo experiencia estructurada.")
 
-                # 6. Exportar a Excel (Plantilla)
+                # Exportar
                 excel_data, error_msg = fill_excel_template(data_json)
-                
                 if excel_data:
                     st.download_button(
-                        label="📥 Generar y Descargar Archivo Excel",
+                        label="📥 Descargar Concepto (Excel)",
                         data=excel_data,
                         file_name=f"IDONEIDAD_{nombre.replace(' ', '_')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                 else:
-                    st.error(f"No se pudo generar el archivo Excel. Error: {error_msg}")
+                    st.error(f"Error generando Excel: {error_msg}")
                 
                 st.markdown("</div>", unsafe_allow_html=True)
 
             except Exception as e:
-                st.error(f"Ocurrió un error durante el análisis: {str(e)}")
+                st.error(f"Ocurrió un error: {str(e)}")
+                with st.expander("Ver detalle técnico"):
+                    st.code(str(e))
+```
