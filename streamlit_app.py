@@ -37,6 +37,26 @@ with st.sidebar:
     else:
         st.warning("Necesitas una API Key para continuar.")
 
+    # --- SECCIÓN COMPARTIR (NUEVO) ---
+    st.markdown("---")
+    st.header("🔗 Compartir App")
+    import pyshorteners
+    
+    # Intentar obtener la URL base (experimental) o pedirla
+    app_url = st.text_input("Pega aquí la URL de tu App:", placeholder="https://...")
+    
+    if app_url:
+        if st.button("Generar Short URL"):
+            try:
+                s = pyshorteners.Shortener()
+                short_url = s.tinyurl.short(app_url)
+                st.success("¡URL Acortada!")
+                st.code(short_url, language="text")
+            except Exception as e:
+                st.error(f"Error al acortar: {str(e)}")
+
+# --- ESTILOS CSS DINÁMICOS ---
+
 # --- ESTILOS CSS DINÁMICOS ---
 if dark_mode:
     # Variables Modo Oscuro
