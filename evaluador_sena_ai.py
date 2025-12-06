@@ -366,8 +366,34 @@ if st.button("EVALUAR CANDIDATO", type="primary"):
                 
                 response = model.generate_content(prompt)
                 
-                # Parsear JSON
-                data_json = json.loads(response.text)
+                # Función para limpiar y parsear JSON de forma robusta
+                def clean_and_parse_json(text):
+                    try:
+                        # 1. Intentar parseo directo
+                        return json.loads(text)
+                    except json.JSONDecodeError:
+                        try:
+                            # 2. Limpiar Markdown (```json ... ```)
+                            text = re.sub(r"```json\s*", "", text)
+                            text = re.sub(r"```\s*$", "", text)
+                            text = text.strip()
+                            
+                            # 3. Escapar caracteres de control problemáticos dentro de cadenas
+                            # Esto es un intento básico, para casos complejos se requeriría un parser más avanzado
+                            text = text.replace('\n', '\\n').replace('\r', '').replace('\t', '\\t')
+                            
+                            return json.loads(text, strict=False)
+                        except Exception as e:
+                            raise e
+
+                # Parsear JSON con manejo de errores
+                try:
+                    data_json = clean_and_parse_json(response.text)
+                except Exception as e:
+                    st.error(f"Error al procesar la respuesta de la IA: {str(e)}")
+                    with st.expander("Ver respuesta cruda (para depuración)"):
+                        st.code(response.text)
+                    st.stop()
                 
                 # 5. Mostrar Resultados (Markdown)
                 st.markdown("<div class='result-container'>", unsafe_allow_html=True)
