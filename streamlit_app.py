@@ -241,7 +241,7 @@ def optimize_image(image, max_size=(1024, 1024)):
     except Exception as e:
         return None
 
-def fill_excel_template(data_json, template_path="2026_IDONEIDAD.xlsx"):
+def fill_excel_template(data_json, template_path="2026_IDONEIDAD_NEW.xlsx"):
     try:
         if not os.path.exists(template_path):
             return None, f"Plantilla '{template_path}' no encontrada."
@@ -249,25 +249,39 @@ def fill_excel_template(data_json, template_path="2026_IDONEIDAD.xlsx"):
         wb = openpyxl.load_workbook(template_path)
         ws = wb.active
         
-        if 'nombre' in data_json: ws['G10'] = data_json['nombre']
-        if 'cedula' in data_json: ws['F11'] = data_json['cedula']
-        
+        # 1. Datos Personales (Append to existing text)
+        if 'nombre' in data_json and ws['D6'].value:
+            ws['D6'] = f"{ws['D6'].value} {data_json['nombre']}"
+            
+        if 'cedula' in data_json and ws['D7'].value:
+            ws['D7'] = f"{ws['D7'].value} {data_json['cedula']}"
+            
+        # 2. Idoneidad y Formación
         if 'idoneidad_texto' in data_json:
-            ws['D14'] = data_json['idoneidad_texto']
-            ws['D14'].alignment = Alignment(wrap_text=True, vertical='top')
+            ws['D10'] = data_json['idoneidad_texto']
+            ws['D10'].alignment = Alignment(wrap_text=True, vertical='top')
             
         if 'formacion_texto' in data_json:
-            ws['I15'] = data_json['formacion_texto']
-            ws['I15'].alignment = Alignment(wrap_text=True, vertical='top')
+            ws['D13'] = data_json['formacion_texto']
+            ws['D13'].alignment = Alignment(wrap_text=True, vertical='top')
             
+        # 3. Tabla de Experiencia
         if 'experiencia_lista' in data_json:
-            start_row = 24
+            start_row = 21 # Nueva fila de inicio
             for i, exp in enumerate(data_json['experiencia_lista']):
-                if i > 10: break # Limite de filas en plantilla
+                if i > 15: break # Limite de filas
                 row = start_row + i
-                ws[f'D{row}'] = exp.get('empresa', '')
-                ws[f'E{row}'] = exp.get('fecha_inicio', '')
-                ws[f'F{row}'] = exp.get('fecha_fin', '')
+                
+                # Validar fechas estrictas
+                fecha_inicio = exp.get('fecha_inicio', '')
+                fecha_fin = exp.get('fecha_fin', '')
+                
+                # Si falta alguna fecha completa, no escribir (aunque la IA ya debió filtrar)
+                if len(fecha_inicio) == 10 and len(fecha_fin) == 10:
+                    ws[f'D{row}'] = exp.get('empresa', '')
+                    ws[f'E{row}'] = fecha_inicio
+                    ws[f'F{row}'] = fecha_fin
+                    ws[f'I{row}'] = exp.get('validada', 'NO') # Columna I para Validada
                 
         output = io.BytesIO()
         wb.save(output)
@@ -340,29 +354,30 @@ if st.button("🚀 EVALUAR CANDIDATO", type="primary"):
                 OBJETIVO:
                 Determinar si el candidato {nombre} (ID: {identificacion}) CUMPLE o NO CUMPLE con el perfil.
                 
-                INSTRUCCIONES CLAVE:
-                1. ANALIZA todos los documentos (PDFs e IMÁGENES). Extrae fechas y datos clave.
-                2. SUMATORIA DE EXPERIENCIA:
-                   - Debes SUMAR el tiempo de todas las certificaciones laborales válidas.
-                   - Compara la SUMA TOTAL vs el TIEMPO REQUERIDO en el perfil.
-                   - Si la suma es menor al requerido -> NO CUMPLE.
-                3. FORMACIÓN: Verifica que los títulos coincidan con lo exigido.
+                REGLAS ESTRICTAS DE VALIDACIÓN:
+                1. FECHAS EXACTAS: Solo acepta experiencias con fecha de inicio y fin completas (DD/MM/AAAA). 
+                   - Si una certificación solo tiene MM/AAAA -> DESCARTARLA (No cuenta).
+                   - Si no tiene fecha de fin (y no es actual) -> DESCARTARLA.
+                2. TARJETA PROFESIONAL: Si el perfil exige Tarjeta Profesional, búscala en los soportes.
+                   - Si la encuentras, extrae: "COPNIA [Número] [Fecha]".
+                3. INSTRUCTORES: La experiencia como "Instructor SENA" o similar ES VÁLIDA como experiencia técnica.
+                4. SUMATORIA: Suma solo los tiempos de certificaciones VÁLIDAS (con fechas completas).
 
                 SALIDA JSON OBLIGATORIA:
                 {{
                     "nombre": "{nombre}",
                     "cedula": "{identificacion}",
                     "concepto_final": "CUMPLE (Solo si cumple 100% formación Y tiempo total experiencia) o NO CUMPLE",
-                    "idoneidad_texto": "CONCLUSIÓN: [CUMPLE/NO CUMPLE]. Justificación: El perfil requiere X meses. El candidato demostró Y meses en total. (Detallar suma).",
-                    "formacion_texto": "Lista de títulos encontrados.",
+                    "idoneidad_texto": "CONCLUSIÓN: [CUMPLE/NO CUMPLE]. Justificación detallada. Si falta Tarjeta Profesional y se requiere, indicarlo.",
+                    "formacion_texto": "Título Profesional + Fecha Grado. (Y Tarjeta Profesional si aplica).",
                     "experiencia_lista": [
                         {{
-                            "empresa": "Nombre",
+                            "empresa": "Nombre Empresa",
                             "fecha_inicio": "DD/MM/AAAA",
                             "fecha_fin": "DD/MM/AAAA",
                             "meses": 12,
                             "dias": 0,
-                            "validada": "Si/No"
+                            "validada": "SI"
                         }}
                     ],
                     "analisis_detallado_markdown": "Tabla resumen en Markdown."
