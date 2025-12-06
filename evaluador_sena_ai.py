@@ -6,6 +6,9 @@ import streamlit as st
 import google.generativeai as genai
 from pypdf import PdfReader
 import os
+import json
+import openpyxl
+from openpyxl.styles import Alignment
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -218,23 +221,6 @@ st.markdown(f"""
         }}
     </style>
 """, unsafe_allow_html=True)
-
-# --- LÓGICA DE NEGOCIO ---
-def extraer_texto_pdf(uploaded_file):
-    try:
-        reader = PdfReader(uploaded_file)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text() + "\n"
-        return text
-    except Exception as e:
-        return f"[Error leyendo PDF: {str(e)}]"
-
-import json
-import openpyxl
-from openpyxl.styles import Alignment
-
-# ... (previous code)
 
 # --- LÓGICA DE NEGOCIO ---
 def extraer_texto_pdf(uploaded_file):
